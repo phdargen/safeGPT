@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SafeGPT Test</title>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div>
+        <input id="message" type="text" placeholder="Type message..."/>
+        <button onclick="sendMessage()">Send</button>
+    </div>
+    <div id="status"></div>
+    <div id="responses"></div>
+
+    <script>
+        const socket = io('http://localhost:4000');
+        const status = document.getElementById('status');
+        
+        socket.on('connect', () => {
+            status.innerHTML = 'Connected to server';
+            console.log('Connected');
+        });
+
+        socket.on('connect_error', (error) => {
+            status.innerHTML = 'Connection error: ' + error;
+            console.error('Connection error:', error);
+        });
+
+        socket.on('agent-response', (response) => {
+            console.log('Agent response:', response);
+            document.getElementById('responses').innerHTML += `<p>Agent: ${response}</p>`;
+        });
+
+        socket.on('tool-response', (response) => {
+            console.log('Tool response:', response);
+            document.getElementById('responses').innerHTML += `<p>Tool: ${response}</p>`;
+        });
+
+        function sendMessage() {
+            const message = document.getElementById('message').value;
+            console.log('Sending:', message);
+            socket.emit('chat-message', message);
+        }
+    </script>
+</body>
+</html> 
