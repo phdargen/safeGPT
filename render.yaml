@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: safegpt-backend
+    runtime: node
+    buildCommand: |
+      cd agentkit && npm install && npm run build && npm i
+      cd ../backend && npm install && npm run build
+      cd ../backend && echo "$WALLET_DATA" > wallet_data.txt
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CDP_API_KEY_NAME
+        sync: false
+      - key: CDP_API_KEY_PRIVATE_KEY
+        sync: false
+      - key: ETHERSCAN_API_KEY
+        sync: false
+      - key: NETWORK_ID
+        value: base-sepolia
+      - key: FRONTEND_URL
+        value: https://your-frontend-url.vercel.app
+      - key: WALLET_DATA
+        sync: false  
