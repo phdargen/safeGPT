@@ -19,11 +19,14 @@ function App() {
     // Wake up the backend by making an HTTP request first
     fetch(SOCKET_URL)
       .then(() => {
-        console.log("✅ Backend warmed up!");
+        console.log("Backend warmed up!");
         socket.connect(); // Now, connect WebSocket
       })
-      .catch((error) => console.error("🔥 Error waking up backend:", error));
+      .catch((error) => console.error("Error waking up backend:", error));
   
+    // Remove any existing listeners before adding new ones
+    socket.removeAllListeners();
+    
     socket.on("connect", () => setStatus("Connected"));
     socket.on("connect_error", (error) => setStatus(`Connection Error: ${error.message || error}`));
   
@@ -31,12 +34,13 @@ function App() {
       setResponses((prev) => [...prev, `Agent: ${response}`]);
     });
   
-    socket.on("tool-response", (response) => {
-      setResponses((prev) => [...prev, `Tool: ${response}`]);
-    });
+    // socket.on("tool-response", (response) => {
+    //   setResponses((prev) => [...prev, `Tool: ${response}`]);
+    // });
   
     return () => {
-      console.log("🔌 Disconnecting WebSocket...");
+      console.log("Disconnecting WebSocket...");
+      socket.removeAllListeners();
       socket.disconnect();
     };
   }, []);
@@ -44,7 +48,7 @@ function App() {
   const sendMessage = () => {
     if (message.trim()) {
       socket.emit("chat-message", message);
-      setResponses((prev) => [...prev, `You: ${message}`]);
+      setResponses((prev) => [...prev, `Prompt: ${message}`]);
       setMessage("");
     }
   };
@@ -52,8 +56,19 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>SafeGPT Chat</h1>
-        <p>Status: {status}</p>
+        <h1 className="App-title">PinguGPT</h1>
+        <p className="App-status">Status: {status}</p>
+      </header>
+  
+      <div className="App-content">
+        <div className="response-container">
+          {responses.map((res, index) => (
+            <p key={index}>{res}</p>
+          ))}
+        </div>
+      </div>
+  
+      <div className="chat-input-container">
         <input
           type="text"
           value={message}
@@ -61,12 +76,7 @@ function App() {
           placeholder="Type a message..."
         />
         <button onClick={sendMessage}>Send</button>
-        <div className="response-container">
-          {responses.map((res, index) => (
-            <p key={index}>{res}</p>
-          ))}
-        </div>
-      </header>
+      </div>
     </div>
   );
 }
