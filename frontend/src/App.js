@@ -53,7 +53,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-900">
       <header className="fixed top-0 left-0 w-full bg-primary shadow-lg">
         <div className="container mx-auto px-4 h-16 flex items-center">
           <h1 className="text-4xl font-bold text-white flex-1 text-center">SafeGPT</h1>
@@ -68,8 +68,8 @@ function App() {
               key={index} 
               className={`p-4 rounded-lg ${
                 res.startsWith('Prompt:') 
-                  ? 'bg-blue-100 ml-auto max-w-[80%]' 
-                  : 'bg-white max-w-[80%]'
+                  ? 'bg-blue-600 text-white ml-auto max-w-[80%]' 
+                  : 'bg-gray-800 text-gray-100 max-w-[80%]'
               }`}
             >
               {res}
