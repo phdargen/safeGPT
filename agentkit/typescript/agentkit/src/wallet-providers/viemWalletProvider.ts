@@ -130,7 +130,7 @@ export class ViemWalletProvider extends EvmWalletProvider {
   getNetwork(): Network {
     return {
       protocolFamily: "evm" as const,
-      chainId: this.#walletClient.chain!.id! as any as string,
+      chainId: String(this.#walletClient.chain!.id!),
       networkId: CHAIN_ID_TO_NETWORK_ID[this.#walletClient.chain!.id!],
     };
   }
@@ -200,5 +200,14 @@ export class ViemWalletProvider extends EvmWalletProvider {
     }
 
     return receipt.transactionHash;
+  }
+
+  /**
+   * Gets the public client.
+   *
+   * @returns The public client.
+   */
+  getPublicClient(): ViemPublicClient {
+    return this.#publicClient;
   }
 }
