@@ -3,7 +3,8 @@ import { HumanMessage } from "@langchain/core/messages";
 import { getAgent } from '../services/agent';
 
 export function setupWebSocket(io: Server) {
-  io.on('connection', (socket: Socket) => {
+  io.on('connection', async (socket: Socket) => {
+
     console.log('Client connected');
 
     // Add a simple echo test
@@ -31,6 +32,27 @@ export function setupWebSocket(io: Server) {
       } catch (error) {
         console.error('Error processing message:', error);
         socket.emit('error', 'Error processing your message');
+      }
+    });
+
+    socket.on('silent-request', async (message: string) => {
+      console.log('Received silent request:', message); // Add logging
+      try {
+        const { agent, config } = getAgent();
+        const stream = await agent.stream(
+          { messages: [new HumanMessage(message)] },
+          config
+        );
+
+        for await (const chunk of stream) {
+          if ("tools" in chunk) {
+            console.log("tool-response:", chunk.tools.messages[0].content);
+            socket.emit('tool-response', chunk.tools.messages[0].content);
+          }
+          // Ignore agent responses for silent requests
+        }
+      } catch (error) {
+        console.error('Error processing silent request:', error);
       }
     });
 
