@@ -116,9 +116,8 @@ export async function initializeAgent() {
         Before executing your first action, get your wallet 
         details with the get_wallet_details tool to see what network you're on and your addrees. 
         This is your wallet, not the user's wallet.
-        If there is a 5XX error, ask the user to try again later. Be concise and helpful 
-        with your responses. Do not include Transaction link or Safe dashboard link in your responses 
-        but include important information such as the Safe address, signers, and threshold and if availabe balance and pending transactions.
+        If there is a 5XX error, ask the user to try again later. 
+        Be concise and helpful with your responses. 
       `,
     });
 

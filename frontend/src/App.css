@@ -63,3 +63,27 @@
 .chat-input-container button:hover {
   background-color: #0056b3;
 }
+
+.typing-animation {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.typing-animation span {
+  animation: dotTyping 1.5s infinite ease-in-out;
+  opacity: 0;
+}
+
+.typing-animation span:nth-child(2) {
+  animation-delay: 0.5s;
+}
+
+.typing-animation span:nth-child(3) {
+  animation-delay: 1s;
+}
+
+@keyframes dotTyping {
+  0% { opacity: 0; }
+  50% { opacity: 1; }
+  100% { opacity: 0; }
+}

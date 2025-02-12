@@ -15,7 +15,11 @@ const io = new Server(httpServer, {
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     methods: ['GET', 'POST']
-  }
+  },
+  pingTimeout: 60000,
+  pingInterval: 10000,
+  upgradeTimeout: 30000,
+  transports: ["websocket", "polling"]
 });
 
 app.use(cors({

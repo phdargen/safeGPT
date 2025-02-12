@@ -139,7 +139,7 @@ Important notes:
         const safeOwners = await safeClient.getOwners();
         const safeThreshold = await safeClient.getThreshold();
 
-        return `Create safe: Successfully created Safe at address ${safeAddress} with signers ${safeOwners} and threshold of ${safeThreshold}. Transaction link: ${txLink}. Safe dashboard link: ${this.safeBaseUrl}/home?safe=${safeAddress}`;
+        return `Create safe: Successfully created Safe at address ${safeAddress} with signers ${safeOwners} and threshold of ${safeThreshold}. Transaction link: ${txLink}.`;
       } else {
         return `Create safe: Error creating Safe`;
       }
@@ -230,7 +230,6 @@ Takes the following inputs:
 Important notes:
 - Requires an existing Safe
 - Must be called by an existing signer
-- Requires confirmation from other signers if threshold > 1
 - If newThreshold not provided, keeps existing threshold
 `,
     schema: AddSignerSchema,
@@ -274,7 +273,8 @@ Important notes:
       } else {
         // Single-sig flow: execute immediately
         await this.safeClient.executeTransaction(safeTransaction);
-        return `Add signer: Successfully added signer ${args.newSigner} to Safe ${args.safeAddress}.`;
+        const txHash = await this.safeClient.getTransactionHash(safeTransaction);
+        return `Add signer: Successfully added signer ${args.newSigner} to Safe ${args.safeAddress}. Transaction link: ${txHash}.`;
       }
     } catch (error) {
       return `Add signer: Error adding signer: ${error instanceof Error ? error.message : String(error)}`;
