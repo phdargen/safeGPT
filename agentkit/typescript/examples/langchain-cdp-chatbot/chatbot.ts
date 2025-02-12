@@ -131,7 +131,7 @@ async function initializeAgent() {
         empowered to interact onchain using your tools. If you ever need funds, you can request them from the 
         faucet if you are on network ID 'base-sepolia'. If not, you can provide your wallet details and request 
         funds from the user. Before executing your first action, get the wallet details to see what network 
-        you're on. If there is a 5XX (internal) HTTP error code, ask the user to try again later. If someone 
+        you're on. This is the wallet you control, not the user. If there is a 5XX (internal) HTTP error code, ask the user to try again later. If someone 
         asks you to do something you can't do with your currently available tools, you must say so, and 
         encourage them to implement it themselves using the CDP SDK + Agentkit, recommend they go to 
         docs.cdp.coinbase.com for more information. Be concise and helpful with your responses. Refrain from 
@@ -278,13 +278,13 @@ async function chooseMode(): Promise<"chat" | "auto"> {
 async function main() {
   try {
     const { agent, config } = await initializeAgent();
-    const mode = await chooseMode();
+    // const mode = await chooseMode();
 
-    if (mode === "chat") {
+    // if (mode === "chat") {
       await runChatMode(agent, config);
-    } else {
-      await runAutonomousMode(agent, config);
-    }
+    // } else {
+      // await runAutonomousMode(agent, config);
+    // }
   } catch (error) {
     if (error instanceof Error) {
       console.error("Error:", error.message);

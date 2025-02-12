@@ -239,6 +239,7 @@ Important notes:
     args: z.infer<typeof AddSignerSchema>,
   ): Promise<string> {
     try {
+
       // Connect to Safe client
       this.safeClient = await initializeClientIfNeeded(
         this.safeClient,
@@ -269,12 +270,11 @@ Important notes:
           senderAddress: walletProvider.getAddress(),
         });
 
-        return `Add signer: Successfully proposed adding signer ${args.newSigner} to Safe ${args.safeAddress}. Safe transaction hash: ${safeTxHash}. The other signers will need to confirm the transaction before it can be executed.`;
+        return `Add signer: Successfully proposed adding signer ${args.newSigner} to Safe ${args.safeAddress} with threshold ${args.newThreshold || currentThreshold}. Safe transaction hash: ${safeTxHash}. The other signers will need to confirm the transaction before it can be executed.`;
       } else {
         // Single-sig flow: execute immediately
-        await this.safeClient.executeTransaction(safeTransaction);
-        const txHash = await this.safeClient.getTransactionHash(safeTransaction);
-        return `Add signer: Successfully added signer ${args.newSigner} to Safe ${args.safeAddress}. Transaction link: ${txHash}.`;
+        const tx = await this.safeClient.executeTransaction(safeTransaction);
+        return `Add signer: Successfully added signer ${args.newSigner} to Safe ${args.safeAddress}. Threshold: ${args.newThreshold || currentThreshold}. Transaction hash: ${tx.hash}.`;
       }
     } catch (error) {
       return `Add signer: Error adding signer: ${error instanceof Error ? error.message : String(error)}`;
@@ -347,11 +347,11 @@ Important notes:
           senderAddress: walletProvider.getAddress(),
         });
 
-        return `Remove signer: Successfully proposed removing signer ${args.signerToRemove} from Safe ${args.safeAddress}. Safe transaction hash: ${safeTxHash}. The other signers will need to confirm the transaction before it can be executed.`;
+        return `Remove signer: Successfully proposed removing signer ${args.signerToRemove} from Safe ${args.safeAddress} with threshold ${args.newThreshold || currentThreshold}. Safe transaction hash: ${safeTxHash}. The other signers will need to confirm the transaction before it can be executed.`;
       } else {
         // Single-sig flow: execute immediately
-        await this.safeClient.executeTransaction(safeTransaction);
-        return `Remove signer: Successfully removed signer ${args.signerToRemove} from Safe ${args.safeAddress}`;
+        const tx = await this.safeClient.executeTransaction(safeTransaction);
+        return `Remove signer: Successfully removed signer ${args.signerToRemove} from Safe ${args.safeAddress}. Threshold: ${args.newThreshold || currentThreshold}. Transaction hash: ${tx.hash}.`;
       }
     } catch (error) {
       return `Remove signer: Error removing signer: ${error instanceof Error ? error.message : String(error)}`;
@@ -418,8 +418,8 @@ Important notes:
         return `Change threshold: Successfully proposed changing threshold to ${args.newThreshold} for Safe ${args.safeAddress}. Safe transaction hash: ${safeTxHash}. The other signers will need to confirm the transaction before it can be executed.`;
       } else {
         // Single-sig flow: execute immediately
-        await this.safeClient.executeTransaction(safeTransaction);
-        return `Change threshold: Successfully changed threshold to ${args.newThreshold} for Safe ${args.safeAddress}`;
+        const tx = await this.safeClient.executeTransaction(safeTransaction);
+        return `Change threshold: Successfully changed threshold to ${args.newThreshold} for Safe ${args.safeAddress}. Transaction hash: ${tx.hash}.`;
       }
     } catch (error) {
       return `Change threshold: Error changing threshold: ${error instanceof Error ? error.message : String(error)}`;
@@ -468,7 +468,7 @@ Important notes:
         return "Execute pending: No pending transactions found.";
       }
 
-      let executedTxs = 0;
+      let executedTxs: string[] = [];
       let skippedTxs = 0;
       const txsToProcess = args.safeTxHash
         ? pendingTxs.results.filter(
@@ -482,15 +482,15 @@ Important notes:
           skippedTxs++;
           continue;
         }
-        await this.safeClient.executeTransaction(tx);
-        executedTxs++;
+        const txHash = (await this.safeClient.executeTransaction(tx)).hash;
+        executedTxs.push(txHash);
       }
 
-      if (executedTxs === 0 && skippedTxs > 0) {
+      if (executedTxs.length === 0 && skippedTxs > 0) {
         return `Execute pending: No transactions executed. ${skippedTxs} transaction(s) have insufficient confirmations.`;
       }
 
-      return `Execute pending: Execution complete. Successfully executed ${executedTxs} transaction(s)${skippedTxs > 0 ? `, ${skippedTxs} still pending and need more confirmations` : ""}.${
+      return `Execute pending: Execution complete. Successfully executed ${executedTxs.length} transaction(s): ${executedTxs.join(", ")}.${
         args.safeTxHash ? ` Safe transaction hash: ${args.safeTxHash}` : ""
       }`;
     } catch (error) {
@@ -578,8 +578,8 @@ Important notes:
         return `Withdraw ETH: Successfully proposed withdrawing ${parseFloat(withdrawAmount.toString()) / 1e18} ETH to ${args.recipientAddress}. Safe transaction hash: ${safeTxHash}. The other signers will need to confirm the transaction before it can be executed.`;
       } else {
         // Single-sig flow: execute immediately
-        await this.safeClient.executeTransaction(safeTransaction);
-        return `Withdraw ETH: Successfully withdrew ${parseFloat(withdrawAmount.toString()) / 1e18} ETH to ${args.recipientAddress}`;
+        const tx = await this.safeClient.executeTransaction(safeTransaction);
+        return `Withdraw ETH: Successfully withdrew ${parseFloat(withdrawAmount.toString()) / 1e18} ETH to ${args.recipientAddress}. Transaction hash: ${tx.hash}.`;
       }
     } catch (error) {
       return `Withdraw ETH: Error withdrawing ETH: ${error instanceof Error ? error.message : String(error)}`;
@@ -660,8 +660,8 @@ Important notes:
         return `Enable allowance module: Successfully proposed enabling allowance module for Safe ${args.safeAddress}. Safe transaction hash: ${safeTxHash}. The other signers will need to confirm the transaction before it can be executed.`;
       } else {
         // Single-sig flow: execute immediately
-        await this.safeClient.executeTransaction(safeTransaction);
-        return `Enable allowance module: Successfully enabled allowance module for Safe ${args.safeAddress}`;
+        const tx = await this.safeClient.executeTransaction(safeTransaction);
+        return `Enable allowance module: Successfully enabled allowance module for Safe ${args.safeAddress}. Transaction hash: ${tx.hash}.`;
       }
     } catch (error) {
       return `Enable allowance module: Error enabling allowance module: ${error instanceof Error ? error.message : String(error)}`;

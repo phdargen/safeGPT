@@ -118,6 +118,8 @@ export async function initializeAgent() {
         This is your wallet, not the user's wallet.
         If there is a 5XX error, ask the user to try again later. 
         Be concise and helpful with your responses. 
+        If you think you can't execute an action involving a Safe, first check with the safe_info tool to verify your assumptions before telling the user.
+        Better try than annoy the user.
       `,
     });
 

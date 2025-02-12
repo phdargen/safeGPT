@@ -15,6 +15,7 @@ const socket = io(SOCKET_URL, {
 function App() {
   const MAX_CHARS = 100;
   const SUGGESTED_PROMPTS_INITIAL = [
+    "What is a Safe smart account?",
     "Create a new Safe",
     "Get info about the safe at <safe-address>",
   ]
@@ -24,8 +25,7 @@ function App() {
     "Remove signer <eth-address>",
     "Change threshold to <threshold>",
     "Withdraw all ETH to <eth-address>",
-    "Excecute pending transactions",
-
+    "Execute pending transactions",
   ]
 
   const [message, setMessage] = useState("");
@@ -135,7 +135,6 @@ function App() {
         const balance = response.match(/ETH Balance: ([0-9.]+)/)?.[1] || '-';
         setWalletInfo({ address, network, balance });
       } else if (response.includes("Safe info:")) {
-        console.log("Parsing Safe info:", response);
         // Parse safe info
         const safeAddress = response.match(/Safe at address: (0x[a-fA-F0-9]+)/)?.[1] || '-';
         const balance = response.match(/Balance: ([0-9.]+)/)?.[1] || '-X';
@@ -156,59 +155,101 @@ function App() {
           pendingTxs
         });
       } else if (response.includes("Add signer:")) {
-        // Update safe info after adding signer
-        const newSigner = response.match(/adding signer (0x[a-fA-F0-9]+)/)?.[1];
-        const newThreshold = response.match(/threshold of (\d+)/)?.[1];
-        if (newSigner) {
-          setSafeInfo(prev => ({
-            ...prev,
-            owners: [...prev.owners, newSigner],
-            threshold: newThreshold ? parseInt(newThreshold) : prev.threshold
-          }));
+        console.log("Add signer response:", response);
+        // Tx proposed but not executed yet
+        if(response.includes("proposed")){
+          const txHash = response.match(/Safe transaction hash: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
+          if (txHash) {
+            setSafeInfo(prev => ({
+              ...prev,
+              pendingTxs: [...prev.pendingTxs, { hash: txHash, confirmations: `1/${safeInfo.threshold}` }],
+              pendingCount: prev.pendingCount + 1
+            }));
+          }
         }
-        const txHash = response.match(/Transaction link: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
-        if (txHash) {
-          setTransactions(prev => [...prev, {
-            hash: txHash,
-            type: 'Add Signer',
-            timestamp: Date.now()
-          }]);
+        else {
+          // Update safe info after adding signer
+          const newSigner = response.match(/Successfully added signer (0x[a-fA-F0-9]+)/)?.[1];
+          const newThreshold = response.match(/Threshold: (\d+)/)?.[1];
+          const txHash = response.match(/Transaction hash: (0x[a-fA-F0-9]+)/)?.[1];
+          if (newSigner) {
+            setSafeInfo(prev => ({
+              ...prev,
+              owners: [...prev.owners, newSigner],
+              threshold: newThreshold ? parseInt(newThreshold) : prev.threshold
+            }));
+          }
+          if (txHash) {
+            setTransactions(prev => [...prev, {
+              hash: txHash,
+              type: 'Add Signer',
+              timestamp: Date.now()
+            }]);
+          }
         }
       } else if (response.includes("Remove signer:")) {
-        // Update safe info after removing signer
-        const removedSigner = response.match(/removing signer (0x[a-fA-F0-9]+)/)?.[1];
-        const newThreshold = response.match(/threshold of (\d+)/)?.[1];
-        const txHash = response.match(/Transaction link: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
-        if (removedSigner) {
-          setSafeInfo(prev => ({
-            ...prev,
+        console.log("Remove signer response:", response);
+        // Tx proposed but not executed yet 
+        if(response.includes("proposed")){
+          const txHash = response.match(/Safe transaction hash: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
+          if (txHash) {
+            setSafeInfo(prev => ({
+              ...prev,
+              pendingTxs: [...prev.pendingTxs, { hash: txHash, confirmations: `1/${safeInfo.threshold}` }],
+              pendingCount: prev.pendingCount + 1
+            }));
+          }
+        }
+        else{
+          // Update safe info after removing signer
+          const removedSigner = response.match(/Successfully removed signer (0x[a-fA-F0-9]+)/)?.[1];
+          const newThreshold = response.match(/Threshold: (\d+)/)?.[1];
+          const txHash = response.match(/Transaction hash: (0x[a-fA-F0-9]+)/)?.[1];
+          console.log("Transaction hash:", txHash);
+          if (removedSigner) {
+            setSafeInfo(prev => ({
+              ...prev,
             owners: prev.owners.filter(owner => owner !== removedSigner),
             threshold: newThreshold ? parseInt(newThreshold) : prev.threshold
           }));
-        }
-        if (txHash) {
-          setTransactions(prev => [...prev, {
+          }
+          if (txHash) {
+            setTransactions(prev => [...prev, {
             hash: txHash,
             type: 'Remove Signer',
             timestamp: Date.now()
           }]);
+          }
         }
       } else if (response.includes("Change threshold:")) {
-        // Update safe info after changing threshold
-        const newThreshold = response.match(/threshold to (\d+)/)?.[1];
-        const txHash = response.match(/Transaction link: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
-        if (newThreshold) {
-          setSafeInfo(prev => ({
+        // Tx proposed but not executed yet
+        if(response.includes("proposed")){
+          const txHash = response.match(/Safe transaction hash: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
+          if (txHash) {
+            setSafeInfo(prev => ({
+              ...prev,
+              pendingTxs: [...prev.pendingTxs, { hash: txHash, confirmations: `1/${safeInfo.threshold}` }],
+              pendingCount: prev.pendingCount + 1
+            }));
+          }
+        }
+        else{
+          // Update safe info after changing threshold
+          const newThreshold = response.match(/threshold to (\d+)/)?.[1];
+          const txHash = response.match(/Transaction hash: (0x[a-fA-F0-9]+)/)?.[1];
+          if (newThreshold) {
+            setSafeInfo(prev => ({
             ...prev,
             threshold: parseInt(newThreshold)
-          }));
-        }
-        if (txHash) {
-          setTransactions(prev => [...prev, {
+            }));
+          }
+          if (txHash) {
+            setTransactions(prev => [...prev, {
             hash: txHash,
             type: 'Change Threshold',
             timestamp: Date.now()
-          }]);
+            }]);
+          }
         }
       } else if (response.includes("Create safe:")) {
         console.log("Create safe response:", response);
@@ -236,14 +277,32 @@ function App() {
           }]);
         }
       } else if (response.includes("Withdraw ETH:")) {
-        console.log("Withdraw ETH response:", response);
-        const txHash = response.match(/Transaction link: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
-        if (txHash) {
-          setTransactions(prev => [...prev, {
-            hash: txHash,
-            type: 'Withdraw ETH',
-            timestamp: Date.now()
-          }]);
+        // Tx proposed but not executed yet
+        if(response.includes("proposed")){
+          const txHash = response.match(/Safe transaction hash: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
+          if (txHash) {
+            setSafeInfo(prev => ({
+              ...prev,
+              pendingTxs: [...prev.pendingTxs, { hash: txHash, confirmations: `1/${safeInfo.threshold}` }],
+              pendingCount: prev.pendingCount + 1,
+            }));
+          }
+        }
+        else{
+          console.log("Withdraw ETH response:", response);
+          const txHash = response.match(/Transaction hash: (0x[a-fA-F0-9]+)/)?.[1];
+          const withdrawAmount = response.match(/withdrew ([0-9.]+)/)?.[1];
+          if (txHash) {
+            setSafeInfo(prev => ({
+              ...prev,
+              balance: prev.balance - withdrawAmount
+            }));
+            setTransactions(prev => [...prev, {
+              hash: txHash,
+              type: 'Withdraw ETH',
+              timestamp: Date.now()
+              }]);
+          }
         }
       } else {
         // If none of the above patterns match and we have a safe address, request updated safe info
@@ -369,7 +428,15 @@ function App() {
                   components={{
                     // Style markdown elements
                     p: ({node, ...props}) => <p className="mb-2" {...props} />,
-                    a: ({node, ...props}) => <a className="text-blue-400 hover:text-blue-300" {...props} />,
+                    a: ({node, href, ...props}) => (
+                      <a 
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-indigo-200 hover:text-white underline" 
+                        {...props} 
+                      />
+                    ),
                     ul: ({node, ...props}) => <ul className="list-disc ml-4 mb-2" {...props} />,
                     ol: ({node, ...props}) => <ol className="list-decimal ml-4 mb-2" {...props} />,
                     li: ({node, ...props}) => <li className="mb-1" {...props} />,

@@ -17,24 +17,28 @@ export const initializeClientIfNeeded = async (
   signer: string,
 ): Promise<Safe> => {
   // If no client exists, initialize new one
-  if (!currentClient) {
+  // if (!currentClient) {
+    console.log("Initializing new Safe client");
     return await Safe.init({
       provider,
       signer,
       safeAddress,
     });
-  }
+  // }
 
+  // TODO: FIX THIS
   // If client exists but for different Safe address, reinitialize
-  const currentAddress = await currentClient.getAddress();
-  if (currentAddress.toLowerCase() !== safeAddress.toLowerCase()) {
-    return await Safe.init({
-      provider,
-      signer,
-      safeAddress,
-    });
-  }
+  // const currentAddress = await currentClient.getAddress();
+  // if (currentAddress.toLowerCase() !== safeAddress.toLowerCase()) {
+  //   console.log("Reinitializing Safe client");
+  //   return await Safe.init({
+  //     provider,
+  //     signer,
+  //     safeAddress,
+  //   });
+  // }
 
-  // Return existing client if it's for the same Safe
-  return currentClient;
+  // // Return existing client if it's for the same Safe
+  // console.log("Returning existing Safe client");
+  // return currentClient;
 };
