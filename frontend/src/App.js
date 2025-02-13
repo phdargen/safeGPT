@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import ReactMarkdown from 'react-markdown';
 
-//const SOCKET_URL = "https://safegpt.onrender.com";
-const SOCKET_URL = "http://localhost:4000";
+const SOCKET_URL = "https://safegpt.onrender.com";
+//const SOCKET_URL = "http://localhost:4000";
 
 const socket = io(SOCKET_URL, {
   transports: ["websocket", "polling"],
