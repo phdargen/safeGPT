@@ -38,8 +38,6 @@ const PORT = process.env.PORT || 4000;
 
 httpServer.listen(PORT, async () => {
   try {
-    // Initialize agent on server start
-    await initializeAgent();
     console.log(`Server running on port ${PORT}`);
   } catch (error) {
     console.error('Failed to start server:', error);

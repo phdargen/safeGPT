@@ -15,9 +15,12 @@ import { MemorySaver } from "@langchain/langgraph";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import * as fs from "fs";
 
-let agent: any;
-let agentConfig: any;
-
+// Store agents by socket ID
+const agents = new Map<string, {
+  agent: any;
+  config: any;
+  memory: MemorySaver;
+}>();
 
 function validateEnvironment(): void {
     const missingVars: string[] = [];
@@ -51,7 +54,12 @@ validateEnvironment();
 // Configure a file to persist the agent's CDP MPC Wallet Data
 const WALLET_DATA_FILE = "wallet_data.txt";
 
-export async function initializeAgent() {
+export async function initializeAgent(socketId: string) {
+  // Return existing agent if already initialized
+  if (agents.has(socketId)) {
+    return agents.get(socketId);
+  }
+
   try {
     const llm = new ChatOpenAI({
       model: "gpt-4o-mini",
@@ -60,7 +68,6 @@ export async function initializeAgent() {
     let walletDataStr: string | null = null;
 
     // Read existing wallet data if available
-    console.log("current working directory:", process.cwd());
     if (fs.existsSync(WALLET_DATA_FILE)) {
       try {
         walletDataStr = fs.readFileSync(WALLET_DATA_FILE, "utf8");
@@ -76,8 +83,6 @@ export async function initializeAgent() {
       cdpWalletData: walletDataStr || undefined,
       networkId: process.env.NETWORK_ID || "base-sepolia",
     });
-
-    console.log("address:", await walletProvider.getWallet().getDefaultAddress());
 
     const agentkit = await AgentKit.from({
       walletProvider,
@@ -104,9 +109,9 @@ export async function initializeAgent() {
     const tools = await getLangChainTools(agentkit);
     const memory = new MemorySaver();
     
-    agentConfig = { configurable: { thread_id: "SafeGPT Agent" } };
+    const agentConfig = { configurable: { thread_id: `SafeGPT Agent - ${socketId}` } };
 
-    agent = createReactAgent({
+    const agent = createReactAgent({
       llm,
       tools: tools as any,
       checkpointSaver: memory,
@@ -123,6 +128,11 @@ export async function initializeAgent() {
       `,
     });
 
+    // Store the new agent instance
+    agents.set(socketId, { agent, config: agentConfig, memory });
+
+    console.log("Agent number", agents.size, "initialized for socket ID:", socketId, "and agent address:", (await walletProvider.getWallet().getDefaultAddress()).getId());
+
     return { agent, config: agentConfig };
   } catch (error) {
     console.error("Failed to initialize agent:", error);
@@ -130,9 +140,15 @@ export async function initializeAgent() {
   }
 }
 
-export function getAgent() {
-  if (!agent) {
-    throw new Error("Agent not initialized");
+export function getAgent(socketId: string) {
+  const agentData = agents.get(socketId);
+  if (!agentData) {
+    throw new Error(`No agent found for socket ${socketId}`);
   }
-  return { agent, config: agentConfig };
+  return { agent: agentData.agent, config: agentData.config };
+}
+
+export function removeAgent(socketId: string) {
+  agents.delete(socketId);
+  console.log("Removed agent for socket ID:", socketId, ". Number of agents:", agents.size);
 } 

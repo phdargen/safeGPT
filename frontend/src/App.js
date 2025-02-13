@@ -2,14 +2,15 @@ import React, { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import ReactMarkdown from 'react-markdown';
 
-// const SOCKET_URL = "https://safegpt.onrender.com";
-const SOCKET_URL = "http://localhost:4000";
+const SOCKET_URL = "https://safegpt.onrender.com";
+//const SOCKET_URL = "http://localhost:4000";
 
 const socket = io(SOCKET_URL, {
   transports: ["websocket", "polling"],
   reconnection: true,
   reconnectionAttempts: 20,
-  reconnectionDelay: 10000
+  reconnectionDelay: 10000,
+  timeout: 20000
 });
 
 function App() {
@@ -58,64 +59,48 @@ function App() {
     fetch(SOCKET_URL)
       .then(() => {
         console.log("Backend warmed up!");
-        socket.connect(); // Now, connect WebSocket
+        if (!socket.connected) {
+          socket.connect(); // Now, connect WebSocket
+          console.log("Socket connecting...");
+        } else {
+          console.log("Socket already connected");
+        }
+        console.log("Socket connected with ID:", socket.id);
       })
-      .catch((error) => console.error("Error waking up backend:", error));
+      .catch((error) => {
+        console.error("Error connecting to backend:", error);
+        console.error("Error waking up backend:", error);
+      });
   
     // Remove any existing listeners before adding new ones
     socket.removeAllListeners();
     
     socket.on("connect", () => {
-      console.log("Socket connected!");
+      console.log("Socket connected with ID:", socket.id);
       setStatus("Connected");
-
+    });
+  
+    socket.on("connected", (data) => {
+      console.log("Server acknowledged connection with ID:", data.id);
       if(walletInfo.address === '-') {
-        // Welcome the user to SafeGPT
         if (SOCKET_URL !== "http://localhost:4000") socket.emit("chat-message", "Welcome the user to SafeGPT.");
-        
-        // Silent wallet info request - won't show in chat
         socket.emit("silent-request", "Get your wallet details using get_wallet_details tool.");
       }
     });
   
     socket.on("connect_error", (error) => {
       console.error("Socket connect error:", error);
+      console.error("Socket connect error details:", {
+        readyState: socket.connected,
+        url: SOCKET_URL,
+        transport: socket.io.engine.transport.name
+      });
       setStatus(`Connection Error: ${error.message || error}`);
     });
   
     socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
       setStatus(`Disconnected: ${reason}`);
-      
-      // If the disconnection wasn't initiated by the client, try to reconnect
-      if (reason !== "io client disconnect") {
-        console.log("Attempting to reconnect...");
-        
-        // Try to wake up backend first, then reconnect socket
-        const retryConnection = async (retries = 3, delay = 5000) => {
-          for (let i = 0; i < retries; i++) {
-            try {
-              console.log(`Reconnection attempt ${i + 1}/${retries}`);
-              const response = await fetch(SOCKET_URL);
-              if (response.ok) {
-                console.log("Backend warmed up, reconnecting socket...");
-                socket.connect();
-                return;
-              }
-            } catch (error) {
-              console.error(`Reconnection attempt ${i + 1}/${retries} failed:`, error);
-            }
-
-            if (i < retries - 1) {
-              console.log(`Retrying in ${delay/1000} seconds...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-            }
-          }
-          setStatus("Failed to reconnect to backend");
-        };
-
-        retryConnection();
-      }
     });
 
     socket.on("agent-response", (response) => {
@@ -312,13 +297,28 @@ function App() {
       setToolResponses((prev) => [...prev, `Tool: ${response}`]);
     });
   
+    socket.on("error", (error) => {
+      console.error("Socket error:", error);
+      setStatus(`Error: ${error}`);
+    });
+  
     return () => {
       console.log("Disconnecting WebSocket...");
       socket.removeAllListeners();
-      socket.disconnect();
+      //socket.disconnect();
     };
   }, [safeInfo.address, lastSafeInfoRequest, walletInfo.address]);
   
+  // Send initial messages when connected
+  useEffect(() => {
+    console.log("StatusXX:", status);
+    if (status === "Connected" && walletInfo.address === '-') {
+      console.log("Sending welcome message and silent request for socket ID:", socket.id);
+      socket.emit("chat-message", "Welcome the user to SafeGPT.");
+      socket.emit("silent-request", "Get your wallet details using get_wallet_details tool.");
+    }
+  }, [status, walletInfo.address]);
+
   // User interaction
   // ----------------
   const sendMessage = () => {

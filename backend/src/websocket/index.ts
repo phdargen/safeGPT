@@ -1,11 +1,23 @@
 import { Server, Socket } from 'socket.io';
 import { HumanMessage } from "@langchain/core/messages";
-import { getAgent } from '../services/agent';
+import { getAgent, initializeAgent, removeAgent } from '../services/agent';
 
 export function setupWebSocket(io: Server) {
-  io.on('connection', async (socket: Socket) => {
+  console.log("Setting up WebSocket server...");
+  
+  io.on("connect_error", (error) => {
+    console.error("Socket.IO connect error:", error);
+  });
 
-    console.log('Client connected');
+  io.on('connection', async (socket: Socket) => {
+    console.log('Client connected with ID:', socket.id);
+
+    // Initialize agent for this socket
+    console.log("Initializing agent for socket ID:", socket.id);
+    await initializeAgent(socket.id);
+
+    // Acknowledge connection
+    socket.emit('connected', { id: socket.id });
 
     // Add a simple echo test
     socket.on('test', (msg) => {
@@ -14,12 +26,13 @@ export function setupWebSocket(io: Server) {
     });
 
     socket.on('chat-message', async (message: string) => {
+      console.log('Received chat message from socket ID:', socket.id);
       console.log('Received chat message:', message);
       try {
+        const { agent, config } = getAgent(socket.id);
         let agentResponse = '';
         let toolResponse = null;
         
-        const { agent, config } = getAgent();
         const stream = await agent.stream(
           { messages: [new HumanMessage(message)] },
           config
@@ -49,9 +62,10 @@ export function setupWebSocket(io: Server) {
     });
 
     socket.on('silent-request', async (message: string) => {
-      console.log('Received silent request:', message); // Add logging
+      console.log('Received silent request from socket ID:', socket.id);
+      console.log('Received silent request:', message);
       try {
-        const { agent, config } = getAgent();
+        const { agent, config } = getAgent(socket.id);
         const stream = await agent.stream(
           { messages: [new HumanMessage(message)] },
           config
@@ -70,7 +84,9 @@ export function setupWebSocket(io: Server) {
     });
 
     socket.on('disconnect', () => {
-      console.log('Client disconnected');
+      console.log('Client disconnected with ID:', socket.id);
+      // Clean up agent when socket disconnects
+      removeAgent(socket.id);
     });
   });
 } 
