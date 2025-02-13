@@ -52,7 +52,7 @@ function validateEnvironment(): void {
 validateEnvironment();
 
 // Configure a file to persist the agent's CDP MPC Wallet Data
-const WALLET_DATA_FILE = "wallet_data.txt";
+const WALLET_DATA_FILE = "wallet_data_sepolia.txt";
 
 export async function initializeAgent(socketId: string) {
   // Return existing agent if already initialized

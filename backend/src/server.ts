@@ -34,6 +34,15 @@ app.use('/api', apiRouter);
 // WebSocket setup
 setupWebSocket(io);
 
+// Log socket server events
+io.engine.on("connection_error", (err) => {
+  console.log("Connection error:", err);
+});
+
+io.engine.on("headers", (headers, req) => {
+  console.log("Handshake initiated");
+});
+
 const PORT = process.env.PORT || 4000;
 
 httpServer.listen(PORT, async () => {

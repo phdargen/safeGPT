@@ -2,8 +2,8 @@ import React, { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import ReactMarkdown from 'react-markdown';
 
-const SOCKET_URL = "https://safegpt.onrender.com";
-//const SOCKET_URL = "http://localhost:4000";
+//const SOCKET_URL = "https://safegpt.onrender.com";
+const SOCKET_URL = "http://localhost:4000";
 
 const socket = io(SOCKET_URL, {
   transports: ["websocket", "polling"],
@@ -19,15 +19,19 @@ function App() {
     "What is a Safe smart account?",
     "Create a new Safe",
     "Get info about the safe at <safe-address>",
-  ]
-  const SUGGESTED_PROMPTS = [
+  ];
+
+  // Move this inside the component to make it dynamic
+  const getSuggestedPrompts = () => [
     "Get info about the safe at <safe-address>",
     "Add signer <eth-address>",
     "Remove signer <eth-address>",
     "Change threshold to <threshold>",
     "Withdraw all ETH to <eth-address>",
     "Execute pending transactions",
-  ]
+    ...(walletInfo.network === "ethereum-sepolia" && !safeInfo.allowanceModuleEnabled ? ["Activate allowance module"] : []),
+    ...(safeInfo.allowanceModuleEnabled ? ["Set allowance of 1 WETH for delegate <eth-address> "] : []),
+  ];
 
   const [message, setMessage] = useState("");
   const [responses, setResponses] = useState([]);
@@ -35,13 +39,16 @@ function App() {
   const [walletInfo, setWalletInfo] = useState({
     address: '-',
     network: '-',
-    balance: '-'
+    balance: '-',
+    wethBalance: '-'
   });
   const [safeInfo, setSafeInfo] = useState({
     address: '-',
     balance: '-',
+    wethBalance: '-',
     owners: [],
     threshold: 0,
+    allowanceModuleEnabled: false,
     pendingCount: 0,
     pendingTxs: []
   });
@@ -106,14 +113,20 @@ function App() {
     socket.on("agent-response", (response) => {
       console.log("Received agent response:", response);
       if(response.trim() !== "") {  
-        setResponses((prev) => [...prev, `Agent: ${response}`]);
+        setResponses((prev) => [
+          ...prev, 
+          `Agent: ${response}`,
+          prev.length === 0 ? `**Warning**: This project is in beta, use at your own risk. All transactions are excecuted on testnets, **do NOT send any mainnet funds!**` : null
+        ].filter(Boolean));
         setIsLoading(false);
       }
     });
   
     socket.on("tool-response", (response) => {
       console.log("Tool response:", response);
-      if (response.includes("Wallet Details:")) {
+      if(response.includes("Error")){
+        console.log("Error:", response);
+      } else if (response.includes("Wallet Details:")) {
         // Parse wallet details
         const address = response.match(/Address: (0x[a-fA-F0-9]+)/)?.[1] || '-';
         const network = response.match(/Network ID: ([^\n*]+)/)?.[1] || '-';
@@ -123,8 +136,10 @@ function App() {
         // Parse safe info
         const safeAddress = response.match(/Safe at address: (0x[a-fA-F0-9]+)/)?.[1] || '-';
         const balance = response.match(/Balance: ([0-9.]+)/)?.[1] || '-X';
+        const wethBalance = response.match(/WETH Balance: ([0-9.]+)/)?.[1] || '-X';
         const owners = response.match(/owners: ((?:0x[a-fA-F0-9]+(?:, )?)+)/)?.[1]?.split(', ') || [];
         const threshold = response.match(/Threshold: (\d+)/)?.[1] || '0';
+        const allowanceModuleEnabled = response.match(/Allowance module enabled: (true|false)/)?.[1] || 'false';
         const pendingCount = response.match(/Pending transactions: (\d+)/)?.[1] || '0';
         const pendingTxs = response.match(/Transaction ([^\n]+)/g)?.map(tx => {
           const [hash, confirmations] = tx.match(/Transaction (0x[a-fA-F0-9]+) \((\d+\/\d+)/)?.slice(1) || [];
@@ -134,8 +149,10 @@ function App() {
         setSafeInfo({
           address: safeAddress,
           balance,
+          wethBalance,
           owners,
           threshold: parseInt(threshold),
+          allowanceModuleEnabled,
           pendingCount: parseInt(pendingCount),
           pendingTxs
         });
@@ -277,6 +294,7 @@ function App() {
           console.log("Withdraw ETH response:", response);
           const txHash = response.match(/Transaction hash: (0x[a-fA-F0-9]+)/)?.[1];
           const withdrawAmount = response.match(/withdrew ([0-9.]+)/)?.[1];
+          console.log("withdrawAmount", withdrawAmount);
           if (txHash) {
             setSafeInfo(prev => ({
               ...prev,
@@ -287,6 +305,56 @@ function App() {
               type: 'Withdraw ETH',
               timestamp: Date.now()
               }]);
+          }
+        }
+      } else if (response.includes("Enable allowance module:")) {
+        // Tx proposed but not executed yet
+        if(response.includes("proposed")){
+          const txHash = response.match(/Safe transaction hash: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
+          if (txHash) {
+            setSafeInfo(prev => ({
+              ...prev,
+              pendingTxs: [...prev.pendingTxs, { hash: txHash, confirmations: `1/${safeInfo.threshold}` }],
+              pendingCount: prev.pendingCount + 1,
+            }));
+          }
+        }else{
+          const txHash = response.match(/Transaction hash: (0x[a-fA-F0-9]+)/)?.[1];
+          if (txHash) {
+              setSafeInfo(prev => ({
+              ...prev,
+              allowanceModuleEnabled: true
+            }));
+            setTransactions(prev => [...prev, {
+              hash: txHash,
+              type: 'Enable Allowance Module',
+              timestamp: Date.now()
+            }]);
+          }
+        }
+      }else if (response.includes("Set allowance:")) {
+        if(response.includes("proposed")){
+          const txHash = response.match(/Safe transaction hash: [^\s]+\/(0x[a-fA-F0-9]+)/)?.[1];
+          if (txHash) {
+            setSafeInfo(prev => ({
+              ...prev,
+              pendingTxs: [...prev.pendingTxs, { hash: txHash, confirmations: `1/${safeInfo.threshold}` }],
+              pendingCount: prev.pendingCount + 1,
+            }));
+          }
+        }
+        else{
+          const txHash = response.match(/Transaction hash: (0x[a-fA-F0-9]+)/)?.[1];
+          if (txHash) {
+            setSafeInfo(prev => ({
+              ...prev,
+              allowanceModuleEnabled: true
+            }));
+            setTransactions(prev => [...prev, {
+              hash: txHash,
+              type: 'Set Allowance',
+              timestamp: Date.now()
+            }]);
           }
         }
       } else {
@@ -309,16 +377,6 @@ function App() {
     };
   }, [safeInfo.address, lastSafeInfoRequest, walletInfo.address]);
   
-  // Send initial messages when connected
-  useEffect(() => {
-    console.log("StatusXX:", status);
-    if (status === "Connected" && walletInfo.address === '-') {
-      console.log("Sending welcome message and silent request for socket ID:", socket.id);
-      socket.emit("chat-message", "Welcome the user to SafeGPT.");
-      socket.emit("silent-request", "Get your wallet details using get_wallet_details tool.");
-    }
-  }, [status, walletInfo.address]);
-
   // User interaction
   // ----------------
   const sendMessage = () => {
@@ -404,9 +462,9 @@ function App() {
   // ---
   return (
     <div className="min-h-screen bg-gray-900">
-      <header className="fixed top-0 left-0 w-full bg-primary shadow-lg z-50">
-        <div className="container mx-auto px-4 h-16 flex items-center">
-          <h1 className="text-4xl font-bold text-white flex-1 text-center">SafeGPT</h1>
+      <header className="fixed top-0 left-0 w-full bg-gradient-to-r from-blue-600 via-gray-800 to-blue-600 shadow-lg z-50">
+        <div className="container mx-auto px-4 h-18 flex items-center">
+          <h1 className="text-5xl font-bold text-white flex-1 text-center">SafeGPT</h1>
         </div>
       </header>
 
@@ -420,7 +478,9 @@ function App() {
                 className={`p-4 rounded-lg ${
                   res.startsWith('Agent:') 
                     ? 'bg-blue-600 text-white ml-auto max-w-[80%]' 
-                    : 'bg-gray-800 text-gray-100 max-w-[80%]'
+                    : res.startsWith('**Warning**:')
+                      ? 'bg-red-600 text-white max-w-[80%]'
+                      : 'bg-green-500 text-gray-100 max-w-[80%]'
                 }`}
               >
                 <ReactMarkdown 
@@ -481,6 +541,7 @@ function App() {
               }</p>}
               {walletInfo.network !== '-' && <p>Network: {walletInfo.network}</p>}
               {walletInfo.balance !== '-' && <p>Balance: {formatBalance(walletInfo.balance)}</p>}
+              {/* {walletInfo.wethBalance !== '-' && <p>WETH Balance: {formatBalance(walletInfo.wethBalance)}</p>} */}
             </div>
           </div>
 
@@ -502,6 +563,8 @@ function App() {
                 ) : '-'
               }</p>}
               {safeInfo.balance !== '-' && <p>Balance: {formatBalance(safeInfo.balance)}</p>}
+              {safeInfo.wethBalance !== '-' && <p>WETH Balance: {formatBalance(safeInfo.wethBalance)}</p>}
+              {safeInfo.allowanceModuleEnabled && <p>Allowance Module Enabled</p>}
               {safeInfo.owners.length > 0 && (
                 <>
                   <p>Threshold: {safeInfo.threshold} of {safeInfo.owners.length} signers</p>
@@ -563,14 +626,13 @@ function App() {
       </div>
 
       <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4 mt-4">
-        <div className="container mx-auto flex flex-col gap-4 bg-white">
+        <div className="container mx-auto flex flex-col gap-4 bg-white-100">
           {/* Suggested Prompts */}
           <div className="flex flex-wrap gap-2">
-            {(safeInfo.address === '-' ? SUGGESTED_PROMPTS_INITIAL : SUGGESTED_PROMPTS).map((prompt, index) => (
+            {(safeInfo.address === '-' ? SUGGESTED_PROMPTS_INITIAL : getSuggestedPrompts()).map((prompt, index) => (
               <button
                 key={index}
                 onClick={() => {
-                  // Remove placeholder text between <...>
                   setMessage(prompt.replace(/<[^>]+>/g, ''));
                   document.querySelector('input[type="text"]').focus();
                 }}

@@ -51,3 +51,40 @@ export const WithdrawFromSafeSchema = z.object({
 export const EnableAllowanceModuleSchema = z.object({
   safeAddress: z.string().describe("Address of the Safe to enable allowance module for"),
 });
+
+export const SetAllowanceSchema = z.object({
+  safeAddress: z.string().describe("Address of the Safe"),
+  delegateAddress: z.string().describe("Address of the delegate who will receive the allowance"),
+  tokenAddress: z
+    .string()
+    .optional()
+    .describe("Address of the ERC20 token (defaults to Sepolia WETH)")
+    .default("0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"),
+  amount: z.string().describe("Amount of tokens to allow (e.g. '1.5' for 1.5 tokens)"),
+  resetTimeInMinutes: z
+    .number()
+    .optional()
+    .describe("One time allowance by default. If larger than zero, time in minutes after which the allowance resets").default(0),
+});
+
+export const GetAllowanceInfoSchema = z.object({
+  safeAddress: z.string().describe("Address of the Safe"),
+  delegateAddress: z.string().describe("Address of the delegate to check allowance for"),
+  tokenAddress: z
+    .string()
+    .optional()
+    .describe("Address of the ERC20 token (defaults to WETH if not provided)").default("0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"),
+});
+
+export const WithdrawAllowanceSchema = z.object({
+  safeAddress: z.string().describe("Address of the Safe"),
+  tokenAddress: z
+    .string()
+    .optional()
+    .describe("Address of the ERC20 token (defaults to WETH if not provided)").default("0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"),
+  amount: z.string().describe("Amount of tokens to withdraw (in token decimals)"),
+  recipientAddress: z
+    .string()
+    .optional()
+    .describe("Address to receive the tokens (defaults to caller's address)"),
+});

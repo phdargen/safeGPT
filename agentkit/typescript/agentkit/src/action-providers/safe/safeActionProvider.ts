@@ -10,6 +10,9 @@ import {
   ExecutePendingSchema,
   WithdrawFromSafeSchema,
   EnableAllowanceModuleSchema,
+  SetAllowanceSchema,
+  GetAllowanceInfoSchema,
+  WithdrawAllowanceSchema,
 } from "./schemas";
 import { Network } from "../../network";
 import { NETWORK_ID_TO_VIEM_CHAIN } from "../../network/network";
@@ -22,6 +25,13 @@ import Safe, { PredictedSafeProps } from "@safe-global/protocol-kit";
 import SafeApiKit from "@safe-global/api-kit";
 import { getAllowanceModuleDeployment } from "@safe-global/safe-modules-deployments";
 import { initializeClientIfNeeded } from "./utils";
+import { encodeFunctionData } from "viem";
+import { OperationType, MetaTransactionData } from "@safe-global/safe-core-sdk-types";
+import { zeroAddress } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+
+import { abi as ERC20_ABI } from "../erc20/constants";
+
 
 /**
  * Configuration options for the SafeActionProvider.
@@ -188,6 +198,15 @@ Important notes:
         .getPublicClient()
         .getBalance({ address: args.safeAddress });
       const ethBalance = balance ? parseFloat(balance.toString()) / 1e18 : 0;
+     
+      const chainId = this.chain.id.toString();
+      const balanceWETH = await walletProvider.readContract({
+        address: chainId === "11155111" ? "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9" : "0x4200000000000000000000000000000000000006",
+        abi: ERC20_ABI,
+        functionName: "balanceOf",
+        args: [args.safeAddress],
+      });
+      const wethBalance = balanceWETH ? parseFloat(balanceWETH.toString()) / 1e18 : 0;
 
       // Get pending transactions
       const pendingTxDetails = pendingTransactions.results
@@ -199,12 +218,23 @@ Important notes:
           return `\n- Transaction ${tx.safeTxHash} (${confirmations}/${needed} confirmations, confirmed by: ${confirmedBy})`;
         })
         .join("");
+      
+      // Get allowance module
+      let isEnabled = false;
+      const allowanceModule = getAllowanceModuleDeployment({ network: chainId });  
+      if (allowanceModule) {
+        const moduleAddress = allowanceModule?.networkAddresses[chainId];
+        isEnabled = await this.safeClient.isModuleEnabled(moduleAddress);
+      }
 
       return `Safe info:
 - Safe at address: ${args.safeAddress}
+- Chain ID: ${chainId}
 - Balance: ${ethBalance.toFixed(5)} ETH
+- WETH Balance: ${wethBalance.toFixed(5)} WETH
 - ${owners.length} owners: ${owners.join(", ")}
 - Threshold: ${threshold}
+- Allowance module enabled: ${isEnabled}
 - Pending transactions: ${pendingTransactions.count}${pendingTxDetails}`;
     } catch (error) {
       return `Safe info: Error connecting to Safe: ${error instanceof Error ? error.message : String(error)}`;
@@ -665,6 +695,382 @@ Important notes:
       }
     } catch (error) {
       return `Enable allowance module: Error enabling allowance module: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  /**
+   * Sets an allowance for a delegate to spend tokens from the Safe.
+   * 
+   * @param walletProvider - The wallet provider to connect to the Safe.
+   * @param args - The input arguments for setting the allowance.
+   * @returns A message containing the allowance setting details.
+   */
+  @CreateAction({
+    name: "set_allowance",
+    description: `
+Sets a token spending allowance for a delegate address.
+Takes the following inputs:
+- safeAddress: Address of the Safe
+- delegateAddress: Address that will receive the allowance
+- tokenAddress: (Optional) Address of the ERC20 token (defaults to Sepolia WETH)
+- amount: Amount of tokens to allow (e.g. '1.5' for 1.5 tokens)
+- resetTimeInMinutes: Time in minutes after which the allowance resets
+
+Important notes:
+- Requires an existing Safe
+- Must be called by an existing signer
+- Allowance module must be enabled first
+- Amount is in human-readable format (e.g. '1.5' for 1.5 tokens)
+- Requires confirmation from other signers if threshold > 1
+`,
+    schema: SetAllowanceSchema,
+  })
+  async setAllowance(
+    walletProvider: EvmWalletProvider,
+    args: z.infer<typeof SetAllowanceSchema>,
+  ): Promise<string> {
+    try {
+      // Connect to Safe client
+      this.safeClient = await initializeClientIfNeeded(
+        this.safeClient,
+        args.safeAddress,
+        walletProvider.getPublicClient().transport,
+        this.privateKey,
+      );
+
+      console.log("setAllowance called with args", args);
+
+      // Get allowance module for current chain
+      const chainId = this.chain.id.toString();
+      const allowanceModule = getAllowanceModuleDeployment({ network: chainId });
+      if (!allowanceModule) {
+        throw new Error(`Allowance module not found for chainId [${chainId}]`);
+      }
+
+      const moduleAddress = allowanceModule.networkAddresses[chainId];
+
+      // Check if module is enabled
+      const isModuleEnabled = await this.safeClient.isModuleEnabled(moduleAddress);
+      if (!isModuleEnabled) {
+        throw new Error("Allowance module is not enabled for this Safe. Enable it first.");
+      }
+
+      // Default to WETH if no token address provided
+      const tokenAddress = args.tokenAddress || "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"; // Sepolia WETH
+
+      // Get token symbol
+      const tokenSymbol = await walletProvider.getPublicClient().readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            constant: true,
+            inputs: [],
+            name: "symbol",
+            outputs: [{ name: "", type: "string" }],
+            type: "function",
+          },
+        ],
+        functionName: "symbol",
+      });
+
+      // Get token decimals and convert amount
+      const tokenDecimals = await walletProvider.getPublicClient().readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            constant: true,
+            inputs: [],
+            name: "decimals",
+            outputs: [{ name: "", type: "uint8" }],
+            type: "function",
+          },
+        ],
+        functionName: "decimals",
+      });
+
+      // Convert amount to token decimals
+      const amount = BigInt(Math.floor(parseFloat(args.amount) * Math.pow(10, Number(tokenDecimals))));
+
+      // Prepare the allowance setting transaction
+      const setAllowanceData = encodeFunctionData({
+        abi: allowanceModule.abi,
+        functionName: "setAllowance",
+        args: [
+          args.delegateAddress,
+          tokenAddress,
+          amount,
+          BigInt(args.resetTimeInMinutes || 0), // Use 0 for one-time allowance if not specified
+          BigInt(0), // resetBaseMin (0 is fine as default)
+        ],
+      });
+
+      // Create transaction data
+      const transactions: MetaTransactionData[] = [
+        {
+          to: moduleAddress,
+          value: "0",
+          data: setAllowanceData,
+          operation: OperationType.Call,
+        },
+      ];
+
+      const safeTransaction = await this.safeClient.createTransaction({
+        transactions,
+        onlyCalls: true,
+      });
+
+      const currentThreshold = await this.safeClient.getThreshold();
+
+      // Update success message to include reset time info
+      const resetTimeMsg = args.resetTimeInMinutes > 0 
+        ? ` (resets every ${args.resetTimeInMinutes} minutes)`
+        : ` (one-time allowance)`;
+
+      if (currentThreshold > 1) {
+        // Multi-sig flow: propose transaction
+        const safeTxHash = await this.safeClient.getTransactionHash(safeTransaction);
+        const signature = await this.safeClient.signHash(safeTxHash);
+
+        await this.apiKit.proposeTransaction({
+          safeAddress: args.safeAddress,
+          safeTransactionData: safeTransaction.data,
+          safeTxHash,
+          senderSignature: signature.data,
+          senderAddress: walletProvider.getAddress(),
+        });
+
+        return `Set allowance: Successfully proposed setting allowance of ${args.amount} ${tokenSymbol} (${tokenAddress})${resetTimeMsg} for delegate ${args.delegateAddress}. Safe transaction hash: ${safeTxHash}. The other signers will need to confirm the transaction before it can be executed.`;
+      } else {
+        // Single-sig flow: execute immediately
+        const tx = await this.safeClient.executeTransaction(safeTransaction);
+        return `Set allowance: Successfully set allowance of ${args.amount} ${tokenSymbol} (${tokenAddress})${resetTimeMsg} for delegate ${args.delegateAddress}. Transaction hash: ${tx.hash}.`;
+      }
+    } catch (error) {
+      return `Set allowance: Error setting allowance: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  /**
+   * Gets the current allowance for a delegate to spend tokens from the Safe.
+   * 
+   * @param walletProvider - The wallet provider to connect to the Safe.
+   * @param args - The input arguments for getting the allowance.
+   * @returns A message containing the current allowance details.
+   */
+  @CreateAction({
+    name: "get_allowance_info",
+    description: `
+Gets the current token spending allowance for a delegate address.
+Takes the following inputs:
+- safeAddress: Address of the Safe
+- delegateAddress: Address of the delegate to check allowance for
+- tokenAddress: (Optional) Address of the ERC20 token (defaults to WETH)
+
+Important notes:
+- Requires an existing Safe
+- Allowance module must be enabled
+- Returns 0 if delegate has no allowance
+`,
+    schema: GetAllowanceInfoSchema,
+  })
+  async getAllowanceInfo(
+    walletProvider: EvmWalletProvider,
+    args: z.infer<typeof GetAllowanceInfoSchema>,
+  ): Promise<string> {
+    try {
+      // Get allowance module for current chain
+      const chainId = this.chain.id.toString();
+      const allowanceModule = getAllowanceModuleDeployment({ network: chainId });
+      if (!allowanceModule) {
+        throw new Error(`Allowance module not found for chainId [${chainId}]`);
+      }
+
+      const moduleAddress = allowanceModule.networkAddresses[chainId];
+
+      // Default to WETH if no token address provided
+      const tokenAddress = args.tokenAddress || "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"; // Sepolia WETH
+
+      // Get current allowance
+      const allowance = await walletProvider.getPublicClient().readContract({
+        address: moduleAddress,
+        abi: allowanceModule.abi,
+        functionName: "getTokenAllowance",
+        args: [args.safeAddress, args.delegateAddress, tokenAddress],
+      });
+      console.log("allowance", allowance);
+
+      // Get token details for better formatting
+      const tokenSymbol = await walletProvider.getPublicClient().readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            constant: true,
+            inputs: [],
+            name: "symbol",
+            outputs: [{ name: "", type: "string" }],
+            type: "function",
+          },
+        ],
+        functionName: "symbol",
+      });
+      console.log("tokenSymbol", tokenSymbol);
+
+      const tokenDecimals = await walletProvider.getPublicClient().readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            constant: true,
+            inputs: [],
+            name: "decimals",
+            outputs: [{ name: "", type: "uint8" }],
+            type: "function",
+          },
+        ],
+        functionName: "decimals",
+      });
+
+      // Format allowance with token decimals
+      const formattedAllowance = parseFloat(allowance.toString()) / Math.pow(10, Number(tokenDecimals));
+      return `Get allowance: Delegate ${args.delegateAddress} has an allowance of ${formattedAllowance} ${tokenSymbol} (${tokenAddress}) from Safe ${args.safeAddress}`;
+    } catch (error) {
+      return `Get allowance: Error getting allowance: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  /**
+   * Withdraws tokens using an allowance from a Safe.
+   * 
+   * @param walletProvider - The wallet provider to connect to the Safe.
+   * @param args - The input arguments for withdrawing the allowance.
+   * @returns A message containing the withdrawal details.
+   */
+  @CreateAction({
+    name: "withdraw_allowance",
+    description: `
+Withdraws tokens using an allowance from a Safe.
+Takes the following inputs:
+- safeAddress: Address of the Safe
+- tokenAddress: (Optional) Address of the ERC20 token (defaults to WETH)
+- amount: Amount of tokens to withdraw
+- recipientAddress: (Optional) Address to receive the tokens (defaults to caller's address)
+
+Important notes:
+- Requires an existing Safe
+- Allowance module must be enabled
+- Must have sufficient allowance
+- Amount must be within allowance limit
+`,
+    schema: WithdrawAllowanceSchema,
+  })
+  async withdrawAllowance(
+    walletProvider: EvmWalletProvider,
+    args: z.infer<typeof WithdrawAllowanceSchema>,
+  ): Promise<string> {
+    try {
+      // Get allowance module for current chain
+      const chainId = this.chain.id.toString();
+      const allowanceModule = getAllowanceModuleDeployment({ network: chainId });
+      if (!allowanceModule) {
+        throw new Error(`Allowance module not found for chainId [${chainId}]`);
+      }
+
+      const moduleAddress = allowanceModule.networkAddresses[chainId];
+
+      // Default to WETH if no token address provided
+      const tokenAddress = args.tokenAddress || "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"; // Sepolia WETH
+      const recipientAddress = args.recipientAddress || walletProvider.getAddress();
+
+      // Get current allowance to check nonce
+      const allowance = await walletProvider.getPublicClient().readContract({
+        address: moduleAddress,
+        abi: allowanceModule.abi,
+        functionName: "getTokenAllowance",
+        args: [args.safeAddress, walletProvider.getAddress(), tokenAddress],
+      });
+
+      // Get token decimals and convert amount
+      const tokenDecimals = await walletProvider.getPublicClient().readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            constant: true,
+            inputs: [],
+            name: "decimals",
+            outputs: [{ name: "", type: "uint8" }],
+            type: "function",
+          },
+        ],
+        functionName: "decimals",
+      });
+
+      // Convert amount to token decimals
+      const amount = BigInt(Math.floor(parseFloat(args.amount) * Math.pow(10, Number(tokenDecimals))));
+
+      // Generate transfer hash
+      const hash = await walletProvider.getPublicClient().readContract({
+        address: moduleAddress,
+        abi: allowanceModule.abi,
+        functionName: "generateTransferHash",
+        args: [
+          args.safeAddress,
+          tokenAddress,
+          recipientAddress,
+          amount,
+          zeroAddress,
+          BigInt(0),
+          allowance[4], // nonce
+        ],
+      });
+
+      // Sign the hash
+      const account = privateKeyToAccount(this.privateKey as `0x${string}`);
+      const signature = await account.sign({
+        hash: hash as unknown as `0x${string}`,
+      });
+
+      // Send transaction directly without simulation
+      const tx = await walletProvider.sendTransaction({
+        to: moduleAddress,
+        data: encodeFunctionData({
+          abi: allowanceModule.abi,
+          functionName: "executeAllowanceTransfer",
+          args: [
+            args.safeAddress,
+            tokenAddress,
+            recipientAddress,
+            amount,
+            zeroAddress,
+            BigInt(0),
+            walletProvider.getAddress(),
+            signature,
+          ],
+        }),
+        value: BigInt(0),
+      });
+
+      const receipt = await walletProvider.getPublicClient().waitForTransactionReceipt({ hash: tx });
+
+      // Get token details for better formatting
+      const tokenSymbol = await walletProvider.getPublicClient().readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: [
+          {
+            constant: true,
+            inputs: [],
+            name: "symbol",
+            outputs: [{ name: "", type: "string" }],
+            type: "function",
+          },
+        ],
+        functionName: "symbol",
+      });
+
+      // Format amount with token decimals
+      const formattedAmount = parseFloat(amount.toString()) / Math.pow(10, Number(tokenDecimals));
+
+      return `Withdraw allowance: Successfully withdrew ${formattedAmount} ${tokenSymbol} from Safe ${args.safeAddress} to ${recipientAddress}. Transaction hash: ${receipt.transactionHash}`;
+    } catch (error) {
+      return `Withdraw allowance: Error withdrawing allowance: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 

@@ -18,7 +18,7 @@ export const initializeClientIfNeeded = async (
 ): Promise<Safe> => {
   // If no client exists, initialize new one
   // if (!currentClient) {
-    console.log("Initializing new Safe client");
+    // console.log("Initializing new Safe client");
     return await Safe.init({
       provider,
       signer,
