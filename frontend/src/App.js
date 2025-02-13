@@ -375,7 +375,7 @@ function App() {
       socket.removeAllListeners();
       //socket.disconnect();
     };
-  }, [safeInfo.address, lastSafeInfoRequest, walletInfo.address]);
+  }, [safeInfo.address, lastSafeInfoRequest, walletInfo.address, safeInfo.threshold, safeInfo.allowanceModuleEnabled]);
   
   // User interaction
   // ----------------
