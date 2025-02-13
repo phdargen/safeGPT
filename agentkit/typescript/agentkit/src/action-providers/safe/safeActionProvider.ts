@@ -13,6 +13,7 @@ import {
   SetAllowanceSchema,
   GetAllowanceInfoSchema,
   WithdrawAllowanceSchema,
+  AnalyzeTransactionSchema,
 } from "./schemas";
 import { Network } from "../../network";
 import { NETWORK_ID_TO_VIEM_CHAIN } from "../../network/network";
@@ -31,7 +32,7 @@ import { zeroAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 import { abi as ERC20_ABI } from "../erc20/constants";
-
+import { riskAnalysis } from "./utils";
 
 /**
  * Configuration options for the SafeActionProvider.
@@ -492,6 +493,7 @@ Important notes:
         this.privateKey,
       );
 
+      // Get pending transactions
       const pendingTxs = await this.apiKit.getPendingTransactions(args.safeAddress);
 
       if (pendingTxs.results.length === 0) {
@@ -507,11 +509,24 @@ Important notes:
         : pendingTxs.results.filter(tx => tx.isExecuted === false);
 
       for (const tx of txsToProcess) {
-        // Skip if not enough confirmations
-        if (tx.confirmations && tx.confirmations.length < tx.confirmationsRequired) {
+        // Check if agent is signer and transaction needs one more signature
+        const agentAddress = walletProvider.getAddress();
+        const hasAgentSigned = tx.confirmations?.some(c => c.owner.toLowerCase() === agentAddress.toLowerCase());
+        const confirmations = tx.confirmations?.length || 0;
+
+        if (confirmations === tx.confirmationsRequired - 1 && !hasAgentSigned) {
+          // Agent is last required signer - execute directly
+          const txHash = (await this.safeClient.executeTransaction(tx)).hash;
+          executedTxs.push(txHash);
+          continue;
+        }
+
+        // Otherwise, skip if not enough confirmations
+        if (confirmations < tx.confirmationsRequired) {
           skippedTxs++;
           continue;
         }
+
         const txHash = (await this.safeClient.executeTransaction(tx)).hash;
         executedTxs.push(txHash);
       }
@@ -1071,6 +1086,51 @@ Important notes:
       return `Withdraw allowance: Successfully withdrew ${formattedAmount} ${tokenSymbol} from Safe ${args.safeAddress} to ${recipientAddress}. Transaction hash: ${receipt.transactionHash}`;
     } catch (error) {
       return `Withdraw allowance: Error withdrawing allowance: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  /**
+   * Analyzes a pending Safe transaction to explain what it does.
+   * 
+   * @param walletProvider - The wallet provider to connect to the Safe.
+   * @param args - The input arguments for analyzing the transaction.
+   * @returns A detailed analysis report of the transaction.
+   */
+  @CreateAction({
+    name: "analyze_transaction",
+    description: `
+Analyzes a pending Safe transaction to explain what it does.
+Takes the following inputs:
+- safeAddress: Address of the Safe
+- safeTxHash: Hash of the transaction to analyze
+
+Returns a detailed analysis including:
+- Who proposed it and when
+- Current confirmation status
+- What the transaction will do if executed
+- Any risk considerations
+`,
+    schema: AnalyzeTransactionSchema,
+  })
+  async analyzeTransaction(walletProvider: EvmWalletProvider, args: z.infer<typeof AnalyzeTransactionSchema>): Promise<string> {
+    try {
+
+      // Connect to Safe client
+      this.safeClient = await initializeClientIfNeeded(
+        this.safeClient,
+        args.safeAddress,
+        walletProvider.getPublicClient().transport,
+        this.privateKey,
+      );
+
+      // Get Safe info
+      const owners = await this.safeClient.getOwners();
+
+      const report = await riskAnalysis(this.apiKit, walletProvider.getPublicClient(), args.safeAddress, args.safeTxHash, owners);
+
+      return `Transaction ${args.safeTxHash} found in pending transactions: ${JSON.stringify(report)}`;
+    } catch (error) {
+      return `Analyze transaction: Error analyzing transaction: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 

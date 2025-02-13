@@ -14,7 +14,7 @@ const socket = io(SOCKET_URL, {
 });
 
 function App() {
-  const MAX_CHARS = 100;
+  const MAX_CHARS = 200;
   const SUGGESTED_PROMPTS_INITIAL = [
     "What is a Safe smart account?",
     "Create a new Safe",
@@ -27,8 +27,8 @@ function App() {
     "Add signer <eth-address>",
     "Remove signer <eth-address>",
     "Change threshold to <threshold>",
-    "Withdraw all ETH to <eth-address>",
-    "Execute pending transactions",
+    ...(safeInfo.pendingTxs.length > 0 ? ["Analyze pending transaction <tx-hash>"] : ["Withdraw all ETH to <eth-address>"]),
+    ...(safeInfo.pendingTxs.length > 0 ? ["Execute pending transaction <tx-hash>"] : []),
     ...(walletInfo.network === "ethereum-sepolia" && !safeInfo.allowanceModuleEnabled ? ["Activate allowance module"] : []),
     ...(safeInfo.allowanceModuleEnabled ? ["Set allowance of 1 WETH for delegate <eth-address> "] : []),
   ];
@@ -90,7 +90,7 @@ function App() {
     socket.on("connected", (data) => {
       console.log("Server acknowledged connection with ID:", data.id);
       if(walletInfo.address === '-') {
-        if (SOCKET_URL !== "http://localhost:4000") socket.emit("chat-message", "Welcome the user to SafeGPT.");
+        if (SOCKET_URL !== "http://localhost:4000") socket.emit("chat-message", "Welcome the user to SafeGPT. Best experienced on desktop.");
         socket.emit("silent-request", "Get your wallet details using get_wallet_details tool.");
       }
     });
@@ -468,9 +468,9 @@ function App() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto flex h-[calc(100vh-4rem)]">
+      <div className="max-w-7xl mx-auto flex flex-col lg:flex-row h-[calc(100vh-4rem)]">
         {/* Left side - Chat */}
-        <div className="w-2/3 px-4 pt-20 pb-48 overflow-y-auto">
+        <div className="w-full lg:w-2/3 px-4 pt-20 pb-48 overflow-y-auto">
           <div className="space-y-4">
             {responses.map((res, index) => (
               <div 
@@ -521,7 +521,7 @@ function App() {
         </div>
 
         {/* Right side - Info Boxes */}
-        <div className="w-1/3 pt-20 pb-48 px-4 space-y-4 overflow-y-auto">
+        <div className="w-full lg:w-1/3 pt-20 pb-48 px-4 space-y-4 overflow-y-auto">
           {/* Agent Info Box */}
           <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-bold text-white mb-4">Agent Info</h2>
@@ -625,10 +625,11 @@ function App() {
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4 mt-4">
-        <div className="container mx-auto flex flex-col gap-4 bg-white-100">
+      {/* Input area at bottom */}
+      <div className="fixed bottom-0 left-0 w-full bg-white border-t p-4">
+        <div className="container mx-auto flex flex-col gap-4">
           {/* Suggested Prompts */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
             {(safeInfo.address === '-' ? SUGGESTED_PROMPTS_INITIAL : getSuggestedPrompts()).map((prompt, index) => (
               <button
                 key={index}

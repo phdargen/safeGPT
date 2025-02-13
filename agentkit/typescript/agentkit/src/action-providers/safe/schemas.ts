@@ -88,3 +88,8 @@ export const WithdrawAllowanceSchema = z.object({
     .optional()
     .describe("Address to receive the tokens (defaults to caller's address)"),
 });
+
+export const AnalyzeTransactionSchema = z.object({
+  safeAddress: z.string().describe("Address of the Safe"),
+  safeTxHash: z.string().describe("Hash of the transaction to analyze"),
+});

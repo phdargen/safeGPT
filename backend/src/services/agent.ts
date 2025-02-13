@@ -124,7 +124,8 @@ export async function initializeAgent(socketId: string) {
         If there is a 5XX error, ask the user to try again later. 
         Be concise and helpful with your responses. 
         If you think you can't execute an action involving a Safe, first check with the safe_info tool to verify your assumptions before telling the user.
-        Better try than annoy the user.
+        Better try than annoy the user. 
+        When you report a transaction analysis, try to interpret it and report it in a way that is easy to understand.
       `,
     });
 
