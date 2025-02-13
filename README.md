@@ -26,7 +26,7 @@ SafeGPT is powered by an intelligent onchain agent that assists users in creatin
 
 ## How?
 
-1. Visit: [safe-gpt.vercel.app](safe-gpt.vercel.app)
+1. Visit: [safe-gpt.vercel.app](https://safe-gpt.vercel.app/)
 2. Start chatting with the AI assistant
 
 ## Security Considerations
