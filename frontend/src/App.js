@@ -10,7 +10,7 @@ const socket = io(SOCKET_URL, {
   reconnection: true,
   reconnectionAttempts: 20,
   reconnectionDelay: 10000,
-  timeout: 100000
+  timeout: 20000
 });
 
 function App() {
