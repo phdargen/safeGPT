@@ -4,25 +4,30 @@
   <img src="frontend/public/logo.png" alt="SafeGPT Logo" width="100"/>
 </p>
 
-**SafeGPT** is an AI-powered assistant designed to help users interact with the [Safe Protocol](https://app.safe.global/welcome) to set up and manage smart accounts for secure and efficient onchain asset management. Smart account add robust multi-signature (multi-sig) capabilities that enhance security by requiring multiple approvals for transactions.
-Built on top of [Coinbase's AgentKit](https://github.com/coinbase/agentkit) and integrating the [Safe SDK](https://github.com/safe-global/safe-core-sdk), 
-SafeGPT is powered by an intelligent onchain agent that assists users in creating and managing Safe smart accounts with ease.
+**SafeGPT** is an AI-powered assistant designed to help users interact with the [Safe Protocol](https://app.safe.global/welcome) for secure and efficient onchain asset management. Safe smart accounts add robust multi-signature (multi-sig) capabilities that enhance security by requiring multiple approvals for transactions. Built on top of [Coinbase's AgentKit](https://github.com/coinbase/agentkit) and integrating the [Safe SDK](https://github.com/safe-global/safe-core-sdk), **SafeGPT** is powered by an intelligent onchain agent that assists users in creating and managing Safe smart accounts with ease.
 
 ## Features
 
 - 🤖 AI-powered chat interface for interacting with the Safe Protocol
-- 🏦 Create new Safe multi-signer
+- 🏦 Create new Safe multi-sig wallet
 - 🔍 View Safe account details 
 - 👥 Manage Safe account signers 
-- 📝 Propose and execute transactions
-- ⚠️ Risk analysis of pending transactions
+- 📝 Propose, approve and execute transactions
+- ⚠️ Risk analysis of pending transactions including:
+  - Detect Safe configuration changes 
+  - Flag high value transfers
+  - Check [onchain reputation score](https://docs.cdp.coinbase.com/reputation/docs/welcome) of destination address
+  - Check if smart contract is verified on etherscan
+  - Flag ERC20 transfer to the token contract itself as high risk
 - 💰 Setup and manage allowance modules
 
 ## Example use cases
 
 - Use agent as co-signer to setup smart account. When satisfied with settings, remove the agent as signer
+- Get comfortable interacting with mult-sig accounts, no code or wallet needed
+- Get info of any deployed Safe wallet
 - Perform risk analysis of pending transactions before signing them
-- Give your agent (or anyone) a monthly allowance
+- Give your agent (or anyone) a monthly allowance to spend from your Safe 
 
 ## How?
 
@@ -49,7 +54,7 @@ SafeGPT is powered by an intelligent onchain agent that assists users in creatin
 
 - Node.js (v16 or higher)
 - npm or yarn
-- Ethereum wallet (MetaMask recommended)
+- Ethereum wallet (optional, if you want to act as co-signer)
 - API key from OpenAI
 - API key from Coinbase Developer Portal
 - API key from Etherscan
