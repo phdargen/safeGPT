@@ -10,7 +10,7 @@ const socket = io(SOCKET_URL, {
   reconnection: true,
   reconnectionAttempts: 20,
   reconnectionDelay: 10000,
-  timeout: 20000
+  timeout: 100000
 });
 
 function App() {
@@ -413,10 +413,10 @@ function App() {
 
   const formatBalance = (balance) => {
     if (balance === '-') return '-';
-    const roundedEth = Number(balance).toFixed(4);
+    const roundedEth = Number(balance).toFixed(3);
     fetchEthPrice();
     if (ethPrice === 0) return `${roundedEth} ETH`;
-    const usdValue = (roundedEth * ethPrice).toFixed(2);
+    const usdValue = (roundedEth * ethPrice).toFixed(0);
     return `${roundedEth} ETH (~$${usdValue})`;
   };
 
