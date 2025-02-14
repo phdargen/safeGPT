@@ -1,7 +1,7 @@
 # SafeGPT
 
 <p align="center">
-  <img src="frontend/public/logo.png" alt="SafeGPT Logo" width="100"/>
+  <img src="frontend/public/logo2.png" alt="SafeGPT Logo" width="100"/>
 </p>
 
 **SafeGPT** is an AI-powered assistant designed to help users interact with the [Safe Protocol](https://app.safe.global/welcome) for secure and efficient onchain asset management. Safe smart accounts add robust multi-signature (multi-sig) capabilities that enhance security by requiring multiple approvals for transactions. Built on top of [Coinbase's AgentKit](https://github.com/coinbase/agentkit) and integrating the [Safe SDK](https://github.com/safe-global/safe-core-sdk), **SafeGPT** is powered by an intelligent onchain agent that assists users in creating and managing Safe smart accounts with ease.
