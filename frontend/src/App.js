@@ -17,13 +17,14 @@ function App() {
   const MAX_CHARS = 200;
   const SUGGESTED_PROMPTS_INITIAL = [
     "What is a Safe smart account?",
+    "List all Safe actions",
     "Create a new Safe",
-    "Get info about the safe at <safe-address>",
+    "Get info about the Safe at <safe-address>",
   ];
 
   // Move this inside the component to make it dynamic
   const getSuggestedPrompts = () => [
-    "Get info about the safe at <safe-address>",
+    "Get info about the Safe at <safe-address>",
     "Add signer <eth-address>",
     "Remove signer <eth-address>",
     "Change threshold to <threshold>",
@@ -52,7 +53,7 @@ function App() {
     pendingCount: 0,
     pendingTxs: []
   });
-  const [status, setStatus] = useState("Connecting...");
+  const [status, setStatus] = useState("Connecting (can take a min)...");
   const [ethPrice, setEthPrice] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [lastSafeInfoRequest, setLastSafeInfoRequest] = useState(0);
@@ -90,7 +91,8 @@ function App() {
     socket.on("connected", (data) => {
       console.log("Server acknowledged connection with ID:", data.id);
       if(walletInfo.address === '-') {
-        if (SOCKET_URL !== "http://localhost:4000") socket.emit("chat-message", "Welcome the user to SafeGPT. Best experienced on desktop.");
+        //if (SOCKET_URL !== "http://localhost:4000") 
+        socket.emit("chat-message", "Welcome the user to SafeGPT, the easiest way to setup and manage secure multi-signature accounts. Best experienced on desktop browser.");
         socket.emit("silent-request", "Get your wallet details using get_wallet_details tool.");
       }
     });
@@ -102,12 +104,12 @@ function App() {
         url: SOCKET_URL,
         transport: socket.io.engine.transport.name
       });
-      setStatus(`Connection Error: ${error.message || error}`);
+      setStatus(`Connection Error: ${error.message || error}. Trying again...`);
     });
   
     socket.on("disconnect", (reason) => {
       console.log("Socket disconnected:", reason);
-      setStatus(`Disconnected: ${reason}`);
+      setStatus(`Disconnected: ${reason}. Trying to reconnect...`);
     });
 
     socket.on("agent-response", (response) => {
@@ -367,7 +369,7 @@ function App() {
   
     socket.on("error", (error) => {
       console.error("Socket error:", error);
-      setStatus(`Error: ${error}`);
+      setStatus(`Error: ${error}. Trying to reconnect...`);
     });
   
     return () => {

@@ -87,18 +87,18 @@ export async function initializeAgent(socketId: string) {
     const agentkit = await AgentKit.from({
       walletProvider,
       actionProviders: [
-        wethActionProvider(),
+        //wethActionProvider(),
         pythActionProvider(),
         walletActionProvider(),
-        erc20ActionProvider(),
-        cdpApiActionProvider({
-          apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-        }),
-        cdpWalletActionProvider({
-          apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-        }),
+        //erc20ActionProvider(),
+        // cdpApiActionProvider({
+        //   apiKeyName: process.env.CDP_API_KEY_NAME,
+        //   apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+        // }),
+        // cdpWalletActionProvider({
+        //   apiKeyName: process.env.CDP_API_KEY_NAME,
+        //   apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+        // }),
         safeActionProvider({
           networkId: walletProvider.getNetwork().networkId,
           privateKey: await (await walletProvider.getWallet().getDefaultAddress()).export(),
@@ -116,11 +116,11 @@ export async function initializeAgent(socketId: string) {
       tools: tools as any,
       checkpointSaver: memory,
       messageModifier: `
-        You are SafeGPT, a helpful agent that can interact with Safe smart accounts using the Coinbase Developer Platform AgentKit.
-        You help users manage their Safe smart accounts and execute transactions. 
-        Before executing your first action, get your wallet 
-        details with the get_wallet_details tool to see what network you're on and your addrees. 
-        This is your wallet, not the user's wallet.
+        You are SafeGPT, a helpful agent that can interact with Safe smart accounts.
+        You help users setup and manage Safe multi-signature accounts.
+        You can also analyze pending transactions and propose/execute transactions. 
+        You have access to a wallet that can act as signer of a Safe smart account.
+        The get_wallet_details tool will give you information about your (agent) wallet, it is not the user's wallet.
         If there is a 5XX error, ask the user to try again later. 
         Be concise and helpful with your responses. 
         If you think you can't execute an action involving a Safe, first check with the safe_info tool to verify your assumptions before telling the user.
