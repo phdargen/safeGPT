@@ -8,6 +8,7 @@ import {
   cdpWalletActionProvider,
   pythActionProvider,
   safeActionProvider,
+  ragActionProvider,
 } from "@coinbase/agentkit";
 import { getLangChainTools } from "@coinbase/agentkit-langchain";
 import { HumanMessage } from "@langchain/core/messages";
@@ -30,7 +31,7 @@ function validateEnvironment(): void {
   const missingVars: string[] = [];
 
   // Check required variables
-  const requiredVars = ["OPENAI_API_KEY", "CDP_API_KEY_NAME", "CDP_API_KEY_PRIVATE_KEY"];
+  const requiredVars = ["OPENAI_API_KEY", "CDP_API_KEY_NAME", "CDP_API_KEY_PRIVATE_KEY", "ASTRA_DB_APPLICATION_TOKEN", "ASTRA_DB_API_ENDPOINT", "ASTRA_DB_NAMESPACE", "ASTRA_DB_COLLECTION"];
   requiredVars.forEach(varName => {
     if (!process.env[varName]) {
       missingVars.push(varName);
@@ -113,6 +114,13 @@ async function initializeAgent() {
           networkId: walletProvider.getNetwork().networkId,
           privateKey: await (await walletProvider.getWallet().getDefaultAddress()).export(),
         }),
+        ragActionProvider({
+          astraDbToken: process.env.ASTRA_DB_APPLICATION_TOKEN,
+          astraDbEndpoint: process.env.ASTRA_DB_API_ENDPOINT,
+          astraDbNamespace: process.env.ASTRA_DB_NAMESPACE,
+          astraDbCollection: process.env.ASTRA_DB_COLLECTION,
+          openAiApiKey: process.env.OPENAI_API_KEY,
+        }),
       ],
     });
 
@@ -132,8 +140,12 @@ async function initializeAgent() {
         empowered to interact onchain using your tools. If you ever need funds, you can request them from the 
         faucet if you are on network ID 'base-sepolia'. If not, you can provide your wallet details and request 
         funds from the user. Before executing your first action, get the wallet details to see what network 
-        you're on. This is the wallet you control, not the user. If there is a 5XX (internal) HTTP error code, ask the user to try again later. If someone 
-        asks you to do something you can't do with your currently available tools, you must say so, and 
+        you're on. This is the wallet you control, not the user. If there is a 5XX (internal) HTTP error code, ask the user to try again later. 
+        
+        You have access to a knowledge base about Safe wallet and blockchain topics. If a user asks how to do something 
+        or requests information about Safe wallet functionality, use the query_knowledge_base action to provide accurate information.
+        
+        If someone asks you to do something you can't do with your currently available tools, you must say so, and 
         encourage them to implement it themselves using the CDP SDK + Agentkit, recommend they go to 
         docs.cdp.coinbase.com for more information. Be concise and helpful with your responses. Refrain from 
         restating your tools' descriptions unless it is explicitly requested.
@@ -173,9 +185,9 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
 
       for await (const chunk of stream) {
         if ("agent" in chunk) {
-          console.log(chunk.agent.messages[0].content);
+          console.log("Agent: " + chunk.agent.messages[0].content);
         } else if ("tools" in chunk) {
-          console.log(chunk.tools.messages[0].content);
+          console.log("Tools: " + chunk.tools.messages[0].content);
         }
         console.log("-------------------");
       }
@@ -221,9 +233,9 @@ async function runChatMode(agent: any, config: any) {
 
       for await (const chunk of stream) {
         if ("agent" in chunk) {
-          console.log(chunk.agent.messages[0].content);
+          console.log("Agent: " + chunk.agent.messages[0].content);
         } else if ("tools" in chunk) {
-          console.log(chunk.tools.messages[0].content);
+          console.log("Tools: " + chunk.tools.messages[0].content);
         }
         console.log("-------------------");
       }
