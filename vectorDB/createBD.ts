@@ -157,6 +157,7 @@ const loadSampleData = async () => {
                     });
                     
                     console.log(`Inserted chunk ${j+1}/${chunks.length}`);
+                    //console.log(chunk);
                     successCount++;
                 } catch (error: any) {
                     console.error(`Error processing chunk ${j+1}/${chunks.length} from ${url}:`, error.message);
@@ -186,7 +187,18 @@ const scrapePage = async (url: string) => {
             },
             evaluate: async (page, browser) => {
                 try {
-                    const result = await page.evaluate(() => document.body.innerHTML);
+                    // Target main content area more specifically
+                    const result = await page.evaluate(() => {
+                        // Remove unwanted elements
+                        const elementsToRemove = document.querySelectorAll('header, footer, nav, script, style, .sidebar, .navigation');
+                        elementsToRemove.forEach(el => el.remove());
+                        
+                        // Get the main content - adjust selector based on the actual page structure
+                        const mainContent = document.querySelector('main, article, .article-content, .content')
+                            || document.body;
+                        
+                        return mainContent.textContent || mainContent.innerHTML;
+                    });
                     await browser.close();
                     return result;
                 } catch (error: any) {
@@ -215,37 +227,95 @@ const testVectorDB = async (query: string) => {
       encoding_format: "float",
     });
 
-    // Search the collection for relevant documents
+    // Search the collection first to find most relevant document sources
     const collection = db.collection(process.env.ASTRA_DB_COLLECTION as string);
-    const result = collection.find({}, {
+    const sourcesResult = await collection.find({}, {
       sort: {
         $vector: embedding.data[0].embedding,
       },
-      limit: 10
-    });
+      limit: 10,
+      projection: {
+        metadata: 1,
+      },
+      includeSimilarity: true,
+    }).toArray();
+
+    // Extract unique source URLs from top results
+    const topSources = [...new Set(sourcesResult.map(doc => doc.metadata?.source))];
+
+    // Limit the top sources to 3
+    const topSourcesLimited = topSources.slice(0, 3);
+
+    // Second query filtering by the most relevant sources
+    const result = collection.find(
+      { "metadata.source": { $in: topSourcesLimited } },
+      {
+        sort: {
+          $vector: embedding.data[0].embedding,
+        },
+        limit: 5,
+        projection: {
+          text: 1,
+          metadata: 1,
+        },
+        includeSimilarity: true,
+      }
+    );
     
     const docs = await result.toArray();
-    const docsMap = docs.map((doc) => doc.text);
+    
+    // Format documents with their sources and similarity scores
+    const formattedDocs = docs.map((doc) => ({
+      text: doc.text,
+      source: doc.metadata?.source,
+      similarity: doc.$similarity
+    }));
 
-    // Create a prompt with the retrieved context
-    const docContext = JSON.stringify(docsMap);
+    console.log(`
+        Context from Safe documentation:
+        ${formattedDocs.map(doc => `
+        Source: ${doc.source}
+        Content: ${doc.text}
+        Similarity: ${doc.similarity?.toFixed(3)}
+        ---`).join('\n')}
+    `)
+
+    // Get the document with highest similarity
+    const mostRelevantDoc = formattedDocs[0];
+
     const prompt = `
-      You are a helpful assistant that can answer questions about the following context:
-      ${docContext}
-      Answer the following question:
-      ${query}
-    `;
-    console.log("Generated prompt with context from vector DB");
+You are a knowledgeable assistant specializing in Safe wallet and blockchain security. Use the following verified information to answer the question. If you're not sure about something, say so rather than making assumptions.
 
-    // Generate an answer using the context
+Context from Safe documentation:
+${formattedDocs.map(doc => `
+Content: ${doc.text}
+Similarity: ${doc.similarity?.toFixed(3)}
+---`).join('\n')}
+Most relevant source: ${mostRelevantDoc.source}
+
+Question: ${query}
+
+Please provide a clear, accurate answer based solely on the provided context. Include relevant source URLs if appropriate.`;
+
+    console.log(`Prompt with context: ${prompt}`);
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{role: "user", content: prompt}],
+      messages: [
+        {
+          role: "system",
+          content: "You are a helpful expert on Safe wallet and blockchain security. Provide accurate, focused answers based on the given context."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
     });
     
     return {
       query,
-      relevantDocs: docsMap,
+      relevantDocs: formattedDocs,
       answer: completion.choices[0].message.content
     };
   } catch (error: any) {
@@ -277,26 +347,27 @@ const compareResults = async (query: string) => {
   console.log(`Comparing results for query: "${query}"`);
   
   try {
-    // Get results with vector DB
     const withVectorDB = await testVectorDB(query);
-    
-    // Get results without vector DB
     const withoutVectorDB = await testDirectQuery(query);
     
-    console.log("Query:", query);
-    console.log("\n==========================\n");
-    console.log("With Vector DB:", "\n");
-    console.log(withVectorDB.answer);
-    console.log("\n==========================\n");
-
-    console.log("Without Vector DB:", "\n");
+    console.log("\n=== Query Results ===");
+    console.log("\nQuery:", query);
+    
+    console.log("\n=== With Vector DB ===");
+    console.log("Answer:", withVectorDB.answer);
+    console.log("\nSources used:");
+    withVectorDB.relevantDocs.forEach(doc => {
+      console.log(`- ${doc.source}`);
+    });
+    
+    console.log("\n=== Without Vector DB ===");
     console.log(withoutVectorDB.answer);
-    console.log("\n==========================\n");
     
     return {
       query,
       withVectorDB: withVectorDB.answer,
-      withoutVectorDB: withoutVectorDB.answer
+      withoutVectorDB: withoutVectorDB.answer,
+      sources: withVectorDB.relevantDocs
     };
   } catch (error: any) {
     console.error("Error comparing results:", error.message);
@@ -307,15 +378,16 @@ const compareResults = async (query: string) => {
 
 const main = async () => {
   try {
-    console.log("Starting vector database setup...");
-    await createCollection();
-    console.log("Collection created or verified. Starting data loading...");
-    await loadSampleData();
-    console.log("Data loading completed. Running test query...");
+    //console.log("Starting vector database setup...");
+    //await createCollection();
+    //console.log("Collection created or verified. Starting data loading...");
+    //await loadSampleData();
+    //console.log("Data loading completed. Running test query...");
 
     // Test prompt with vector DB and direct query
-    const testPrompt = "How to perform basic transactions checks on safe wallet?";
-    await compareResults(testPrompt);
+    await compareResults("What is a Safe smart account?");
+    //await compareResults("How to perform basic transactions checks on safe wallet?");
+
     console.log("Test completed successfully!");
   } catch (error: any) {
     console.error("Error in main function:", error.message);

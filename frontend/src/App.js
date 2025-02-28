@@ -17,7 +17,7 @@ function App() {
   const MAX_CHARS = 200;
   const SUGGESTED_PROMPTS_INITIAL = [
     "What is a Safe smart account?",
-    "List all Safe actions",
+    "List actions you can perform",
     "Create a new Safe",
     "Get info about the Safe at <safe-address>",
   ];

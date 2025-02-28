@@ -8,6 +8,7 @@ import {
   cdpWalletActionProvider,
   pythActionProvider,
   safeActionProvider,
+  ragActionProvider,
 } from "@coinbase/agentkit";
 import { getLangChainTools } from "@coinbase/agentkit-langchain";
 import { ChatOpenAI } from "@langchain/openai";
@@ -26,7 +27,7 @@ function validateEnvironment(): void {
     const missingVars: string[] = [];
   
     // Check required variables
-    const requiredVars = ["OPENAI_API_KEY", "CDP_API_KEY_NAME", "CDP_API_KEY_PRIVATE_KEY"];
+    const requiredVars = ["OPENAI_API_KEY", "CDP_API_KEY_NAME", "CDP_API_KEY_PRIVATE_KEY", "ASTRA_DB_APPLICATION_TOKEN", "ASTRA_DB_API_ENDPOINT", "ASTRA_DB_NAMESPACE", "ASTRA_DB_COLLECTION"];
     requiredVars.forEach(varName => {
       if (!process.env[varName]) {
         missingVars.push(varName);
@@ -102,6 +103,13 @@ export async function initializeAgent(socketId: string) {
         safeActionProvider({
           networkId: walletProvider.getNetwork().networkId,
           privateKey: await (await walletProvider.getWallet().getDefaultAddress()).export(),
+        }),
+        ragActionProvider({
+          astraDbToken: process.env.ASTRA_DB_APPLICATION_TOKEN,
+          astraDbEndpoint: process.env.ASTRA_DB_API_ENDPOINT,
+          astraDbNamespace: process.env.ASTRA_DB_NAMESPACE,
+          astraDbCollection: process.env.ASTRA_DB_COLLECTION,
+          openAiApiKey: process.env.OPENAI_API_KEY,
         }),
       ],
     });

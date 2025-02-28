@@ -9,6 +9,7 @@
 ## Features
 
 - 🤖 AI-powered chat interface for interacting with the Safe Protocol
+- 📚 Knowledge-enhanced responses powered by RAG (Retrieval-Augmented Generation) using Safe documentation
 - 🏦 Create new Safe multi-sig wallet
 - 🔍 View Safe account details 
 - 👥 Manage Safe account signers 
@@ -46,7 +47,8 @@
 
 - Backend: Node.js API using Coinbase AgentKit and Safe SDK
 - Frontend: React-based chat interface
-- Deployment: Render (API) + Vercel (Frontend)
+- RAG System: OpenAI embeddings + vector similarity search for knowledge retrieval
+- Deployment: Render (API) + Vercel (Frontend) + Datastax AstraDB (VectorDB)
 
 ## How to run it yourself?
 
@@ -58,6 +60,10 @@
 - API key from OpenAI
 - API key from Coinbase Developer Portal
 - API key from Etherscan
+- Astra DB account and credentials:
+  - Application Token
+  - Database Endpoint
+  - Keyspace Name
 
 ### Installation
 
@@ -81,7 +87,7 @@
     cd backend
     npm install
 ```
-3. Install frontend dependencies:
+4. Install frontend dependencies:
 ```
     cd frontend
     npm install
@@ -100,4 +106,11 @@
     cd frontend
     npm start
     # The application will be available at `http://localhost:3000`
+```
+3. Initialize the vector database (optional, only needed once):
+```
+    cd vectorDB
+    npm istall
+    npm run start
+    # This will populate the Astra DB with Safe documentation
 ```

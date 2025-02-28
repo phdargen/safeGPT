@@ -113,14 +113,39 @@ Important notes:
       });
 
       // Search the collection for relevant documents
-      const result = this.astraDbCollectionClient.find({}, {
+      const result = await this.astraDbCollectionClient.find({}, {
         sort: {
           $vector: embedding.data[0].embedding,
         },
-        limit: 5
-      });
+        limit: 10,
+        projection: {
+          text: 1,
+          metadata: 1,
+        },
+        includeSimilarity: true,
+      }).toArray();
+
+      // Extract unique source URLs from top results
+      const topSources = [...new Set(result.map(doc => doc.metadata?.source))];
+
+      // Limit the top sources to 3
+      const topSourcesLimited = topSources.slice(0, 3);
       
-      const docs = await result.toArray();
+      // Second query filtering by the most relevant sources
+      const docs = await this.astraDbCollectionClient.find(
+        { "metadata.source": { $in: topSourcesLimited } },
+        {
+          sort: {
+            $vector: embedding.data[0].embedding,
+          },
+          limit: 5,
+          projection: {
+            text: 1,
+            metadata: 1,
+          },
+          includeSimilarity: true,
+        }
+      ).toArray();
       
       // If no documents found, return a message
       if (docs.length === 0) {
@@ -128,20 +153,20 @@ Important notes:
       }
       
       // Extract text from documents
-      const docsMap = docs.map((doc) => doc.text);
+      //const docsMap = docs.map((doc) => `Content: ${doc.text} Similarity: ${doc.similarity?.toFixed(3)}`).join('\n');
+      const docsMap = docs.map(doc => doc.text).join('\n');
+
+      // Get the document with highest similarity
+      const mostRelevantDoc = docs[0].metadata?.source;
 
       // Create a prompt with the retrieved context
-      const docContext = JSON.stringify(docsMap);
       const prompt = `
         Use the following context to answer the question:
-        ${docContext}
-        
+        ${docsMap}
+        Most relevant source: ${mostRelevantDoc}
+
         Question: ${args.query}
-        
-        If the context doesn't contain enough information to answer the question completely,
-        acknowledge that and provide the best answer you can based on the available information and point the user to the official Safe documentation at https://docs.safe.global/.
-        Be concise but thorough in your response.
-      `;
+        `;
 
       return prompt;
     } catch (error) {
