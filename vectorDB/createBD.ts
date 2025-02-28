@@ -6,12 +6,57 @@ import OpenAI from "openai"
 
 import "dotenv/config"
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-})
+const openai = new OpenAI({apiKey: process.env.OPENAI_API_KEY})
 
 const data = [
-    'https://help.safe.global/en/articles/276343-how-to-perform-basic-transactions-checks-on-safe-wallet'
+    'https://help.safe.global/en/articles/40869-what-is-safe',
+    'https://help.safe.global/en/articles/40840-why-do-i-need-to-connect-a-signer-wallet',
+    'https://help.safe.global/en/articles/40868-creating-a-safe-on-a-web-browser',
+    'https://help.safe.global/en/articles/40835-what-safe-setup-should-i-use',      
+    'https://help.safe.global/en/articles/110656-account-recovery-with-safe-recoveryhub',
+    'https://help.safe.global/en/articles/40825-supported-asset-types',
+    'https://help.safe.global/en/articles/233902-safe-wallet-native-swaps',
+    'https://help.safe.global/en/articles/232312-managing-assets',
+    'https://help.safe.global/en/articles/40867-how-can-i-receive-assets',
+    'https://help.safe.global/en/articles/180783-what-is-address-poisoning-and-how-does-safe-wallet-battle-it',
+    'https://help.safe.global/en/articles/229313-gas-fee-sponsorship-on-safe-transactions',
+    'https://help.safe.global/en/articles/234052-transaction-builder',
+    'https://help.safe.global/en/articles/40820-send-funds',
+    'https://help.safe.global/en/articles/40837-advanced-transaction-parameters',
+    'https://help.safe.global/en/articles/40815-transaction-fees',
+    'https://help.safe.global/en/articles/40817-reject-and-delete-transactions',
+    'https://help.safe.global/en/articles/40865-gas-less-signatures',
+    'https://help.safe.global/en/articles/40783-what-are-signed-messages',
+    'https://help.safe.global/en/articles/40818-transaction-queue',
+    'https://help.safe.global/en/articles/40822-export-transaction-data',
+    'https://help.safe.global/en/articles/40823-submit-an-abi',
+    'https://help.safe.global/en/articles/40828-gas-estimation',
+    'https://help.safe.global/en/articles/235770-proposers',
+    'https://help.safe.global/en/articles/40863-signature-policies',
+    'https://help.safe.global/en/articles/229763-managing-safe-owners-and-signatures',
+    'https://help.safe.global/en/articles/40842-set-up-and-use-spending-limits',
+    'https://help.safe.global/en/articles/40827-what-is-a-module',
+    'https://help.safe.global/en/articles/40826-add-a-module',
+    'https://help.safe.global/en/articles/276343-how-to-perform-basic-transactions-checks-on-safe-wallet',
+    'https://help.safe.global/en/articles/276344-how-to-verify-safe-wallet-transactions-on-a-hardware-wallet',
+    'https://help.safe.global/en/articles/40834-verify-safe-creation',
+    'https://help.safe.global/en/articles/40866-trustless-interface',
+    'https://help.safe.global/en/articles/40850-sign-transactions-with-a-ledger-device',
+    'https://help.safe.global/en/articles/40847-successfully-created-safe-does-not-show-up-in-the-web-interface-desktop-app',
+    'https://help.safe.global/en/articles/40796-sub-safe-s',
+    'https://help.safe.global/en/articles/40800-how-to-manage-cryptopunks-with-safe',
+    'https://help.safe.global/en/articles/40813-why-can-t-i-transfer-eth-from-a-contract-into-a-safe',
+    'https://help.safe.global/en/articles/40814-what-is-the-safe-transaction-hash-safetxhash',
+    'https://help.safe.global/en/articles/40833-my-safe-transaction-failed-but-etherscan-reports-success-why-is-that',
+    'https://help.safe.global/en/articles/40836-why-do-i-need-to-pay-for-cancelling-a-transaction',
+    'https://help.safe.global/en/articles/40838-what-is-a-fallback-handler-and-how-does-it-relate-to-safe',
+    'https://help.safe.global/en/articles/40839-why-are-transactions-with-the-same-nonce-conflicting-with-each-other',
+    'https://help.safe.global/en/articles/40794-why-do-i-see-an-unexpected-delegate-call-warning-in-my-transaction',
+    'https://docs.safe.global/home/glossary',
+    'https://docs.safe.global/home/what-is-safe',
+    'https://docs.safe.global/home/ai-overview',
+    'https://www.cyfrin.io/blog/how-to-set-up-a-safe-multi-sig-wallet-step-by-step-guide',
+    'https://www.cyfrin.io/blog/verify-safe-multi-sig-wallet-signatures-radiant-capital-hack',    
 ]
 
 const client = new DataAPIClient(process.env.ASTRA_DB_APPLICATION_TOKEN as string)
@@ -22,152 +67,261 @@ const splitter = new RecursiveCharacterTextSplitter({
     chunkOverlap: 100,
 })
 
+// Helper function to delay execution
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper function to retry a function with exponential backoff
+const retry = async <T>(
+  fn: () => Promise<T>, 
+  retries = 3, 
+  backoff = 1000
+): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (retries <= 0) {
+      throw error;
+    }
+    
+    console.log(`Retrying after error: ${error.message}. Retries left: ${retries}`);
+    await delay(backoff);
+    return retry(fn, retries - 1, backoff * 2);
+  }
+};
+
 const createCollection = async () => {
-    const collection = await db.createCollection(process.env.ASTRA_DB_COLLECTION as string, {
-        vector: {
-            dimension: 1536,
-            metric: "cosine", // cosine, euclidean, dot_product
-        },
-    })
-    console.log(collection)
-    return collection
-}
-
-const loadSampleData = async () => {
-    const collection = await db.collection(process.env.ASTRA_DB_COLLECTION as string)
-    for await (const url of data) {
-        const content = await scrapePage(url)
-        const chunks = await splitter.splitText(content)
-        for await (const chunk of chunks) {
-            const embedding = await openai.embeddings.create({
-                model: "text-embedding-3-small",
-                input: chunk,
-                encoding_format: "float",
-            })
-
-            const vector = embedding.data[0].embedding
-
-            const result = await collection.insertOne({
-                $vector: vector,
-                text: chunk,
-                metadata: {source: url},
-            })
-            console.log(result)
+    try {
+        const collection = await db.createCollection(process.env.ASTRA_DB_COLLECTION as string, {
+            vector: {
+                dimension: 1536, // should match the embedding model
+                metric: "cosine", // cosine, euclidean, dot_product
+            },
+        })
+        console.log("Collection created successfully:", collection);
+        return collection;
+    } catch (error: any) {
+        // If collection already exists, just return it
+        if (error.message && error.message.includes("already exists")) {
+            console.log("Collection already exists, using existing collection");
+            return db.collection(process.env.ASTRA_DB_COLLECTION as string);
         }
+        throw error;
     }
 }
 
+const loadSampleData = async () => {
+    const collection = db.collection(process.env.ASTRA_DB_COLLECTION as string);
+    let successCount = 0;
+    let errorCount = 0;
+    
+    for (let i = 0; i < data.length; i++) {
+        const url = data[i];
+        console.log(`Processing URL ${i+1}/${data.length}: ${url}`);
+        
+        try {
+            // Add delay between requests to avoid overwhelming the server
+            if (i > 0) {
+                await delay(2000); // 2s delay between URLs
+            }
+            
+            const content = await retry(() => scrapePage(url));
+            if (!content) {
+                console.log(`No content retrieved from ${url}, skipping`);
+                errorCount++;
+                continue;
+            }
+            
+            const chunks = await splitter.splitText(content);
+            
+            for (let j = 0; j < chunks.length; j++) {
+                const chunk = chunks[j];
+                
+                // Add small delay between embedding requests
+                if (j > 0) {
+                    await delay(500); // 500ms delay between embedding requests
+                }
+                
+                try {
+                    const embedding = await retry(() => openai.embeddings.create({
+                        model: "text-embedding-3-small",
+                        input: chunk,
+                        encoding_format: "float",
+                    }));
+
+                    const vector = embedding.data[0].embedding;
+
+                    const result = await collection.insertOne({
+                        $vector: vector,
+                        text: chunk,
+                        metadata: {source: url},
+                    });
+                    
+                    console.log(`Inserted chunk ${j+1}/${chunks.length}`);
+                    successCount++;
+                } catch (error: any) {
+                    console.error(`Error processing chunk ${j+1}/${chunks.length} from ${url}:`, error.message);
+                    errorCount++;
+                }
+            }
+        } catch (error: any) {
+            console.error(`Error processing URL ${url}:`, error.message);
+            errorCount++;
+        }
+        console.log(`--------------------------------`);
+    }
+    
+    console.log(`Data loading completed. Success: ${successCount}, Errors: ${errorCount}`);
+}
+
 const scrapePage = async (url: string) => {
-    const loader = new PuppeteerWebBaseLoader(url, {
-        launchOptions: {
-            headless: true,
-        },
-        gotoOptions: {
-            waitUntil: "domcontentloaded",
-        },
-        evaluate: async (page, browser) => {
-            const result = await page.evaluate(() => document.body.innerHTML)
-            await browser.close()
-            return result
-        },
-    })
-    return (await loader.scrape())?.replace(/<[^>]*>?/gm, "")
+    try {
+        const loader = new PuppeteerWebBaseLoader(url, {
+            launchOptions: {
+                headless: true,
+                args: ['--no-sandbox', '--disable-setuid-sandbox']
+            },
+            gotoOptions: {
+                waitUntil: "domcontentloaded",
+                timeout: 60000, // Increase timeout to 60 seconds
+            },
+            evaluate: async (page, browser) => {
+                try {
+                    const result = await page.evaluate(() => document.body.innerHTML);
+                    await browser.close();
+                    return result;
+                } catch (error: any) {
+                    await browser.close();
+                    throw error;
+                }
+            },
+        });
+        
+        const content = await loader.scrape();
+        return content?.replace(/<[^>]*>?/gm, "");
+    } catch (error: any) {
+        console.error(`Error scraping ${url}:`, error.message);
+        throw error;
+    }
 }
 
 
 // Test vector database with a query
 const testVectorDB = async (query: string) => {
-  
-  // Get embedding for the query
-  const embedding = await openai.embeddings.create({
-    model: "text-embedding-3-small",
-    input: query,
-    encoding_format: "float",
-  });
+  try {
+    // Get embedding for the query
+    const embedding = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: query,
+      encoding_format: "float",
+    });
 
-  // Search the collection for relevant documents
-  const collection = await db.collection(process.env.ASTRA_DB_COLLECTION as string);
-  const result = await collection.find({}, {
-    sort: {
-      $vector: embedding.data[0].embedding,
-    },
-    limit: 10
-  });
-  
-  const docs = await result.toArray();
-  const docsMap = docs.map((doc) => doc.text);
+    // Search the collection for relevant documents
+    const collection = db.collection(process.env.ASTRA_DB_COLLECTION as string);
+    const result = collection.find({}, {
+      sort: {
+        $vector: embedding.data[0].embedding,
+      },
+      limit: 10
+    });
+    
+    const docs = await result.toArray();
+    const docsMap = docs.map((doc) => doc.text);
 
-  // Create a prompt with the retrieved context
-  const docContext = JSON.stringify(docsMap);
-  const prompt = `
-    You are a helpful assistant that can answer questions about the following context:
-    ${docContext}
-    Answer the following question:
-    ${query}
-  `;
-  console.log(prompt)
+    // Create a prompt with the retrieved context
+    const docContext = JSON.stringify(docsMap);
+    const prompt = `
+      You are a helpful assistant that can answer questions about the following context:
+      ${docContext}
+      Answer the following question:
+      ${query}
+    `;
+    console.log("Generated prompt with context from vector DB");
 
-  // Generate an answer using the context
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{role: "user", content: prompt}],
-  });
-  
-  return {
-    query,
-    relevantDocs: docsMap,
-    answer: completion.choices[0].message.content
-  };
+    // Generate an answer using the context
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{role: "user", content: prompt}],
+    });
+    
+    return {
+      query,
+      relevantDocs: docsMap,
+      answer: completion.choices[0].message.content
+    };
+  } catch (error: any) {
+    console.error("Error in testVectorDB:", error.message);
+    throw error;
+  }
 };
 
 // Test without vector DB 
 const testDirectQuery = async (query: string) => {  
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{role: "user", content: query}],
-  });
-  
-  return {
-    query,
-    answer: completion.choices[0].message.content
-  };
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{role: "user", content: query}],
+    });
+    
+    return {
+      query,
+      answer: completion.choices[0].message.content
+    };
+  } catch (error: any) {
+    console.error("Error in testDirectQuery:", error.message);
+    throw error;
+  }
 };
 
 // Function to compare results with and without vector DB
 const compareResults = async (query: string) => {
   console.log(`Comparing results for query: "${query}"`);
   
-  // Get results with vector DB
-  const withVectorDB = await testVectorDB(query);
-  
-  // Get results without vector DB
-  const withoutVectorDB = await testDirectQuery(query);
-  
-  console.log("Query:", query);
-  console.log("\n==========================\n");
-  console.log("With Vector DB:", "\n");
-  console.log(withVectorDB.answer);
-  console.log("\n==========================\n");
+  try {
+    // Get results with vector DB
+    const withVectorDB = await testVectorDB(query);
+    
+    // Get results without vector DB
+    const withoutVectorDB = await testDirectQuery(query);
+    
+    console.log("Query:", query);
+    console.log("\n==========================\n");
+    console.log("With Vector DB:", "\n");
+    console.log(withVectorDB.answer);
+    console.log("\n==========================\n");
 
-  console.log("Without Vector DB:", "\n");
-  console.log(withoutVectorDB.answer);
-  console.log("\n==========================\n");
-  
-  return {
-    query,
-    withVectorDB: withVectorDB.answer,
-    withoutVectorDB: withoutVectorDB.answer
-  };
+    console.log("Without Vector DB:", "\n");
+    console.log(withoutVectorDB.answer);
+    console.log("\n==========================\n");
+    
+    return {
+      query,
+      withVectorDB: withVectorDB.answer,
+      withoutVectorDB: withoutVectorDB.answer
+    };
+  } catch (error: any) {
+    console.error("Error comparing results:", error.message);
+    throw error;
+  }
 };
 
 
 const main = async () => {
-  await createCollection();
-  await loadSampleData();
+  try {
+    console.log("Starting vector database setup...");
+    await createCollection();
+    console.log("Collection created or verified. Starting data loading...");
+    await loadSampleData();
+    console.log("Data loading completed. Running test query...");
 
-  // Test prompt with vector DB and direct query
-  const testPrompt = "How to perform basic transactions checks on safe wallet?";
-  await compareResults(testPrompt);
+    // Test prompt with vector DB and direct query
+    const testPrompt = "How to perform basic transactions checks on safe wallet?";
+    await compareResults(testPrompt);
+    console.log("Test completed successfully!");
+  } catch (error: any) {
+    console.error("Error in main function:", error.message);
+    console.error(error.stack);
+    process.exit(1);
+  }
 };
 
 // Run the main function

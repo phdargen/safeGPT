@@ -104,11 +104,6 @@ Important notes:
     args: z.infer<typeof QueryKnowledgeBaseSchema>,
   ): Promise<string> {
     try {
-      // Check if vector database configuration is available
-      if (!this.astraDbToken || !this.astraDbEndpoint || !this.astraDbNamespace || 
-          !this.astraDbCollection || !this.openAiApiKey) {
-        return "Knowledge base is not configured. Please provide Astra DB credentials and OpenAI API key in the RAGActionProvider configuration.";
-      }
 
       // Get embedding for the query
       const embedding = await this.openai.embeddings.create({
@@ -138,7 +133,6 @@ Important notes:
       // Create a prompt with the retrieved context
       const docContext = JSON.stringify(docsMap);
       const prompt = `
-        You are a helpful assistant that can answer questions about Safe wallet and blockchain topics.
         Use the following context to answer the question:
         ${docContext}
         
